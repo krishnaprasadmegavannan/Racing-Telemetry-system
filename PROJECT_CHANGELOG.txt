@@ -201,6 +201,44 @@ Solution:
       * Engine Condition: Replaced "Engine Damage: 10%" with "Engine Condition: 99.2%".
       * Badges: Aligned all UI cards to "RACE".
 
+
+--------------------------------------------------------------------------------
+9. LIVE LAP TIMER RESET & SECTOR 3 COMPLETION SYNCHRONIZATION
+--------------------------------------------------------------------------------
+Problem:
+  - The Live Lap Timer in Cockpit was not resetting to 0:00.000 when a lap completed
+    (Sector 3 ending). Instead, the clock would keep running past 1:24.230 into
+    1:30+, or fail to reset smoothly.
+Root Cause Analysis:
+  - Falsy 0 ms Formatting Glitch: `msToLapString(ms)` checked `if (!ms || ms <= 0)`
+    which evaluated `0` as falsy and returned placeholder `'--:--.---'` instead of
+    `'0:00.000'`.
+  - Duplicate Lap Rejection: `lapHistory` initially seeded with Lap 1 caused
+    `alreadyRecorded` check to drop the real Lap 1 completion event emitted by the backend,
+    preventing `lapStartWallMs` from resetting.
+  - Omitted Zeroing in `setLapTiming`: `completeLap` updated `lastLapMs` and `lapNumber`
+    but omitted resetting `currentLapMs: 0` and `currentLapFormatted: '0:00.000'`,
+    causing the UI to retain the old lap time until the next interval tick.
+  - Desynchronized Sector Detection: `checkSectorTransition` relied solely on coarse
+    progress thresholds and required `activeSector === 3 && prev > 0.80 && progress < 0.15`,
+    which could be missed across frames or if client connected mid-lap.
+Solution:
+  - Corrected `msToLapString` and `msToSectorString` to format `0 ms` as `'0:00.000'`
+    and `'0.000s'`.
+  - Upgraded live clock interval to 20 Hz (50 ms) to match the 20 Hz telemetry stream.
+  - Re-architected sector transitions to leverage both `raw.sector` (1, 2, 3) and `progress`:
+    * S1 -> S2: Triggers when entering Sector 2, recording S1 time.
+    * S2 -> S3: Triggers when entering Sector 3, recording S2 time.
+    * S3 -> S1 / Lap Finish: Triggers on `message.lap_completed`, or `prevSec === 3 && curSec === 1`,
+      or progress rollover (`prevProg > 0.85 && progress < 0.15`).
+  - Strict Live Timer Zeroing in `completeLap`:
+    * Sets `lapStartWallMs.current = Date.now()`.
+    * Immediately sets `currentLapMs: 0`, `currentLapFormatted: '0:00.000'`, `currentSectorMs: 0`,
+      and `activeSector: 1` in React state.
+    * Tracks `lastCompletedLapNum` to prevent duplicate history entries while guaranteeing
+      instant timer reset.
+    * Aligns initial wall clock on first received frame so timer reflects exact car track position.
+
 ================================================================================
 END OF CHRONICLE
 ================================================================================

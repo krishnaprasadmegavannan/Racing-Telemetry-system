@@ -6,7 +6,7 @@ import AlertsPanel from '../components/AlertsPanel';
 import { Clock, Navigation, Flag, Trophy, Timer, Activity } from 'lucide-react';
 
 export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
-  const currentLap = lapTiming?.currentLap || data?.tyre_age_lap || 2;
+  const currentLap = lapTiming?.currentLap || data?.tyre_age_lap || 1;
   const activeSector = lapTiming?.activeSector || 1;
   const currentSectorSec = ((lapTiming?.currentSectorMs || 0) / 1000).toFixed(3);
   const lapHistory = lapTiming?.lapHistory || [];

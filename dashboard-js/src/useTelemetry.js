@@ -10,7 +10,7 @@ function roundDec(val, dec = 2) {
 
 // ── Timing helpers ─────────────────────────────────────────────────────────────
 function msToLapString(ms) {
-  if (!ms || ms <= 0) return '--:--.---';
+  if (ms === null || ms === undefined || ms < 0) return '--:--.---';
   const totalSec = Math.floor(ms / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
@@ -19,7 +19,7 @@ function msToLapString(ms) {
 }
 
 function msToSectorString(ms) {
-  if (!ms || ms <= 0) return '--.---s';
+  if (ms === null || ms === undefined || ms < 0) return '--.---s';
   return `${(ms / 1000).toFixed(3)}s`;
 }
 
@@ -78,7 +78,7 @@ export function useTelemetry(url) {
 
   // ── Lap timing state ──────────────────────────────────────────────────────────
   const [lapTiming, setLapTiming] = useState({
-    currentLap: 2,
+    currentLap: 1,
     currentLapMs: 0,
     currentLapFormatted: '0:00.000',
     fastestLapMs: PRESET.baseMs,
@@ -124,12 +124,14 @@ export function useTelemetry(url) {
   const lastExternalPacketMs = useRef(0);
 
   // Lap state refs
-  const lapStartWallMs   = useRef(Date.now());
-  const lapNumber        = useRef(2);
-  const fastestLapMs     = useRef(PRESET.baseMs);
-  const fastestLapNum    = useRef(1);
-  const lastLapMs        = useRef(null);
-  const lapHistory       = useRef([{
+  const lapStartWallMs       = useRef(Date.now());
+  const lapNumber            = useRef(1);
+  const fastestLapMs         = useRef(PRESET.baseMs);
+  const fastestLapNum        = useRef(1);
+  const lastLapMs            = useRef(null);
+  const lastCompletedLapNum  = useRef(0);
+  const hasAlignedClock      = useRef(false);
+  const lapHistory           = useRef([{
     lap: 1,
     ms: PRESET.baseMs,
     formatted: PRESET.formatted,
@@ -145,19 +147,19 @@ export function useTelemetry(url) {
   const sector1EndMs     = useRef(null);
   const sector2EndMs     = useRef(null);
   const activeSector     = useRef(1);
+  const lastSector       = useRef(1);
+  const lastProgress     = useRef(0);
 
   // Fastest lap sector bests
   const fastestS1        = useRef(PRESET.s1Ms);
   const fastestS2        = useRef(PRESET.s2Ms);
   const fastestS3        = useRef(PRESET.s3Ms);
 
-  const lastProgress     = useRef(0);
-
-  // ── Live lap clock (10 Hz tick) ────────────────────────────────────────────────
+  // ── Live lap clock (20 Hz tick, aligned to telemetry stream) ───────────────────
   useEffect(() => {
     lapClockTimer.current = setInterval(() => {
       const now = Date.now();
-      const lapElapsed = now - lapStartWallMs.current;
+      const lapElapsed = Math.max(0, now - lapStartWallMs.current);
       const sectorStart = activeSector.current === 1
         ? lapStartWallMs.current
         : activeSector.current === 2
@@ -179,13 +181,13 @@ export function useTelemetry(url) {
           ? Math.max(0, sector2EndMs.current - sector1EndMs.current)
           : null,
       }));
-    }, 100);
+    }, 50);
     return () => clearInterval(lapClockTimer.current);
   }, []);
 
-  // ── Lap completion ──────────────────────────────────────────────────────────────
-  const completeLap = useCallback((lapTimeMs, lapNum, compData = null) => {
-    const effectiveLapMs = lapTimeMs && lapTimeMs > 10000
+  // ── Lap completion — called when Sector 3 ends ─────────────────────────────────
+  const completeLap = useCallback((lapTimeMs, completedLapNum, compData = null) => {
+    const effectiveLapMs = (lapTimeMs && lapTimeMs > 10000)
       ? lapTimeMs
       : Math.max(PRESET.baseMs - 5000, Date.now() - lapStartWallMs.current);
 
@@ -199,10 +201,10 @@ export function useTelemetry(url) {
       s3 = Math.round(effectiveLapMs - s1 - s2);
     }
 
-    const isPurple = effectiveLapMs < fastestLapMs.current;
+    const isPurple = effectiveLapMs <= fastestLapMs.current;
     if (isPurple) {
       fastestLapMs.current  = effectiveLapMs;
-      fastestLapNum.current = lapNum;
+      fastestLapNum.current = completedLapNum;
       fastestS1.current     = s1;
       fastestS2.current     = s2;
       fastestS3.current     = s3;
@@ -210,7 +212,7 @@ export function useTelemetry(url) {
 
     const delta = effectiveLapMs - fastestLapMs.current;
     const entry = {
-      lap: lapNum,
+      lap: completedLapNum,
       ms: effectiveLapMs,
       formatted: msToLapString(effectiveLapMs),
       delta: isPurple ? 'PURPLE' : msToDeltaString(delta),
@@ -221,19 +223,31 @@ export function useTelemetry(url) {
       s3Formatted: msToSectorString(s3),
     };
 
-    lapHistory.current = [entry, ...lapHistory.current.filter(l => l.lap !== lapNum)].slice(0, 15);
+    // Store in history without duplicates
+    lapHistory.current = [entry, ...lapHistory.current.filter(l => l.lap !== completedLapNum)].slice(0, 15);
     lastLapMs.current  = effectiveLapMs;
-    lapNumber.current  = lapNum + 1;
+    lastCompletedLapNum.current = completedLapNum;
 
+    // NEXT LAP START - RESET LIVE TIMER TO 0:00.000 IMMEDIATELY
+    const nextLap = completedLapNum + 1;
+    lapNumber.current      = nextLap;
     lapStartWallMs.current = Date.now();
     sector1EndMs.current   = null;
     sector2EndMs.current   = null;
     activeSector.current   = 1;
+    lastSector.current     = 1;
     lastProgress.current   = 0;
 
     setLapTiming(prev => ({
       ...prev,
-      currentLap: lapNum + 1,
+      currentLap: nextLap,
+      currentLapMs: 0,
+      currentLapFormatted: '0:00.000',
+      currentSectorMs: 0,
+      activeSector: 1,
+      sector1Ms: null,
+      sector2Ms: null,
+      sector3Ms: null,
       lastLapMs: effectiveLapMs,
       lastLapFormatted: msToLapString(effectiveLapMs),
       lastLapDelta: isPurple ? 'PURPLE' : msToDeltaString(delta),
@@ -249,29 +263,6 @@ export function useTelemetry(url) {
       fastestSector3Formatted: msToSectorString(fastestS3.current),
     }));
   }, []);
-
-  // ── Sector detection ───────────────────────────────────────────────────────────
-  const checkSectorTransition = useCallback((progress) => {
-    const prev = lastProgress.current;
-    lastProgress.current = progress;
-    const now = Date.now();
-
-    if (activeSector.current === 1 && progress >= SECTOR_THRESHOLDS[0] && prev < SECTOR_THRESHOLDS[0]) {
-      sector1EndMs.current = now;
-      activeSector.current = 2;
-    }
-    if (activeSector.current === 2 && progress >= SECTOR_THRESHOLDS[1] && prev < SECTOR_THRESHOLDS[1]) {
-      sector2EndMs.current = now;
-      activeSector.current = 3;
-    }
-    if (activeSector.current === 3 && prev > 0.80 && progress < 0.15) {
-      const curLap = lapNumber.current;
-      const alreadyRecorded = lapHistory.current.some(l => l.lap === curLap);
-      if (!alreadyRecorded) {
-        completeLap(getSimulatedLapMs(curLap), curLap);
-      }
-    }
-  }, [completeLap]);
 
   // ── Frame ingestion with lerp smoothing ──────────────────────────────────────
   const handleIngestedFrame = useCallback((message, isHardware = false) => {
@@ -357,22 +348,67 @@ export function useTelemetry(url) {
       const progress = rawProgress > 0 ? rawProgress
         : (((Date.now() - lapStartWallMs.current) % PRESET.baseMs) / PRESET.baseMs);
 
-      checkSectorTransition(progress);
+      // Determine current sector from telemetry frame or fallback to Monza track sectors:
+      // S1: 0.0 - 0.324 (Curva Grande), S2: 0.324 - 0.653 (Lesmo / Ascari), S3: 0.653 - 1.0 (Parabolica)
+      const currentSector = (raw.sector && [1, 2, 3].includes(Number(raw.sector)))
+        ? Number(raw.sector)
+        : (progress < 0.324 ? 1 : progress < 0.653 ? 2 : 3);
 
-      // Lap completion from backend payload
-      if (message.lap_completed) {
-        const comp = message.lap_completed;
-        const alreadyRecorded = lapHistory.current.some(l => l.lap === comp.lap_number);
-        if (!alreadyRecorded) completeLap(comp.lap_time_ms, comp.lap_number, comp);
-      } else if (message.lap?.lap_completed) {
-        const comp = message.lap.lap_completed;
-        const alreadyRecorded = lapHistory.current.some(l => l.lap === comp.lap_number);
-        if (!alreadyRecorded) completeLap(comp.lap_time_ms, comp.lap_number, comp);
-      } else if (message.lap?.lap_time && message.lap?.lap_number && message.lap.lap_number >= lapNumber.current) {
-        const backendLapMs  = Math.round(message.lap.lap_time * 1000);
-        const backendLapNum = message.lap.lap_number;
-        const alreadyRecorded = lapHistory.current.some(l => l.lap === backendLapNum);
-        if (!alreadyRecorded && backendLapMs > 5000) completeLap(backendLapMs, backendLapNum);
+      // Align live clock to car's track position on first ingested frame
+      if (!hasAlignedClock.current && progress > 0) {
+        hasAlignedClock.current = true;
+        lapStartWallMs.current = Date.now() - Math.round(progress * PRESET.baseMs);
+        if (message.lap?.lap_number) {
+          lapNumber.current = message.lap.lap_number;
+        }
+        activeSector.current = currentSector;
+        lastSector.current = currentSector;
+        if (currentSector >= 2) {
+          sector1EndMs.current = lapStartWallMs.current + PRESET.s1Ms;
+        }
+        if (currentSector >= 3) {
+          sector2EndMs.current = sector1EndMs.current + PRESET.s2Ms;
+        }
+      }
+
+      // Check Sector Transitions
+      const prevSec = lastSector.current;
+      const prevProg = lastProgress.current;
+      lastProgress.current = progress;
+      lastSector.current = currentSector;
+
+      // S1 -> S2 transition
+      if ((prevSec === 1 && currentSector === 2) || (activeSector.current === 1 && progress >= 0.324 && prevProg < 0.324)) {
+        sector1EndMs.current = Date.now();
+        activeSector.current = 2;
+      }
+      // S2 -> S3 transition
+      else if ((prevSec === 2 && currentSector === 3) || (activeSector.current === 2 && progress >= 0.653 && prevProg < 0.653)) {
+        sector2EndMs.current = Date.now();
+        activeSector.current = 3;
+      }
+
+      // ── SECTOR 3 ENDING / LAP COMPLETION CHECK ───────────────────────────
+      // Sector 3 ends and a new lap begins when:
+      // 1) Backend emits an explicit lap_completed event
+      // 2) Sector rolled over from 3 to 1
+      // 3) Progress rolled over from >0.85 to <0.15
+      const comp = message.lap_completed || message.lap?.lap_completed || null;
+      const isSector3Rollover = (prevSec === 3 && currentSector === 1);
+      const isProgressRollover = (prevProg > 0.85 && progress < 0.15);
+
+      if (comp || isSector3Rollover || isProgressRollover) {
+        const compLapNum = comp?.lap_number || (message.lap?.lap_number && message.lap.lap_number > lapNumber.current ? message.lap.lap_number - 1 : lapNumber.current);
+        const effectiveLapNum = Math.max(1, compLapNum);
+
+        if (effectiveLapNum > lastCompletedLapNum.current) {
+          const compLapMs = comp?.lap_time_ms || getSimulatedLapMs(effectiveLapNum);
+          completeLap(compLapMs, effectiveLapNum, comp);
+        } else {
+          // New lap already initialized; ensure wall clock is reset and sector 1 is live
+          lapStartWallMs.current = Date.now() - Math.round(progress * PRESET.baseMs);
+          activeSector.current = 1;
+        }
       }
 
       const fuel_kg = Number(raw.fuel_kg ?? message.fuel_kg ?? Math.max(3.0, 105.0 - (lapNumber.current - 1) * 1.90));
@@ -520,7 +556,7 @@ export function useTelemetry(url) {
     } catch (e) {
       console.error('Frame ingestion error:', e);
     }
-  }, [checkSectorTransition, completeLap]);
+  }, [completeLap]);
 
   // ── Fallback FastF1 playback (20 Hz with sub-frame lerp) ─────────────────────
   useEffect(() => {
@@ -560,12 +596,12 @@ export function useTelemetry(url) {
 
       // Lap wrap-around lap completion
       let lapCompleted = null;
-      if (i1 === 0 && idxFloat < idxStep && simLapNumber > 1) {
-        const prevLap = simLapNumber - 1;
-        const delta = PRESET.deltas[(prevLap - 1) % PRESET.deltas.length];
+      if (idxFloat + idxStep >= N) {
+        const finishedLap = simLapNumber;
+        const delta = PRESET.deltas[(finishedLap - 1) % PRESET.deltas.length];
         const lapTimeMs = PRESET.baseMs + delta;
         lapCompleted = {
-          lap_number: prevLap,
+          lap_number: finishedLap,
           lap_time_ms: lapTimeMs,
           lap_time: lapTimeMs / 1000,
           s1: Math.round(PRESET.s1Ms + (delta * 0.35)) / 1000,
