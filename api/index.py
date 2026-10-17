@@ -63,51 +63,28 @@ def health():
     return {"status": "healthy", "service": "racing-telemetry-pitwall"}
 
 
-def get_simulated_lap(lap_num: int, mode: str = "HOTLAP"):
-    # Realistic lap sequence for Monza FastF1
-    if mode.upper() == "ENDURANCE":
-        # Realistic race stint pace at Monza:
-        # Base race lap: 84.230s (1:24.230 - 105 kg fuel load)
-        # As fuel burns off (-1.85kg/lap), pace improves, but tyre wear adds time
-        endurance_deltas = [
-            0.0,       # Lap 1: 84.230 (race start pace)
-            0.485,     # Lap 2: 84.715 (+0.485, heavy fuel)
-            0.250,     # Lap 3: 84.480 (+0.250)
-            -0.340,    # Lap 4: 83.890 (-0.340 -> PURPLE Stint Best!)
-            0.390,     # Lap 5: 84.620 (+0.390)
-            0.920,     # Lap 6: 85.150 (+0.920, tyre thermal deg)
-            0.080,     # Lap 7: 84.310 (+0.080)
-            0.660,     # Lap 8: 84.890 (+0.660)
-            -0.490,    # Lap 9: 83.740 (-0.490 -> PURPLE Stint Best!)
-            1.190,     # Lap 10: 85.420 (+1.190, high tyre wear)
-        ]
-        delta = endurance_deltas[(lap_num - 1) % len(endurance_deltas)]
-        base_time = 84.230
-        total_time = round(base_time + delta, 3)
-        s1 = round(28.640 + (delta * 0.35), 3)
-        s2 = round(39.180 + (delta * 0.45), 3)
-        s3 = round(total_time - s1 - s2, 3)
-    else:
-        # HOTLAP Qualifying mode:
-        # Base pole lap: 80.161s (1:20.161 - low fuel 12 kg, Soft C4 tyres)
-        hotlap_deltas = [
-            0.0,       # Lap 1: 80.161 (pole benchmark)
-            0.324,     # Lap 2: 80.485 (+0.324)
-            0.112,     # Lap 3: 80.273 (+0.112)
-            -0.215,    # Lap 4: 79.946 (-0.215 -> PURPLE PB!)
-            0.489,     # Lap 5: 80.650 (+0.489)
-            0.720,     # Lap 6: 80.881 (+0.720, tyre degradation)
-            -0.080,    # Lap 7: 80.081 (-0.080)
-            0.250,     # Lap 8: 80.411 (+0.250)
-            -0.290,    # Lap 9: 79.871 (-0.290 -> PURPLE PB!)
-            0.510,     # Lap 10: 80.671 (+0.510)
-        ]
-        delta = hotlap_deltas[(lap_num - 1) % len(hotlap_deltas)]
-        base_time = 80.161
-        total_time = round(base_time + delta, 3)
-        s1 = round(27.412 + (delta * 0.35), 3)
-        s2 = round(37.224 + (delta * 0.45), 3)
-        s3 = round(total_time - s1 - s2, 3)
+def get_simulated_lap(lap_num: int, mode: str = "RACE"):
+    # Authentic Race Pace at Monza (Charles Leclerc #16 Ferrari F1-75 - Race Stint)
+    # Base race pace: 84.230s (1:24.230 on 105 kg fuel load, Medium C3 tyres)
+    # Fuel burns off at ~1.90 kg/lap; dynamic deltas reflect driver pace & tyre deg
+    race_deltas = [
+        0.0,       # Lap 1: 84.230 (race start pace)
+        0.485,     # Lap 2: 84.715 (+0.485, heavy fuel)
+        0.250,     # Lap 3: 84.480 (+0.250)
+        -0.340,    # Lap 4: 83.890 (-0.340 -> PURPLE Stint Best!)
+        0.390,     # Lap 5: 84.620 (+0.390)
+        0.920,     # Lap 6: 85.150 (+0.920, tyre thermal rise)
+        0.080,     # Lap 7: 84.310 (+0.080)
+        0.660,     # Lap 8: 84.890 (+0.660)
+        -0.490,    # Lap 9: 83.740 (-0.490 -> PURPLE Stint Best!)
+        1.190,     # Lap 10: 85.420 (+1.190, high tyre wear)
+    ]
+    delta = race_deltas[(lap_num - 1) % len(race_deltas)]
+    base_time = 84.230
+    total_time = round(base_time + delta, 3)
+    s1 = round(28.640 + (delta * 0.35), 3)
+    s2 = round(39.180 + (delta * 0.45), 3)
+    s3 = round(total_time - s1 - s2, 3)
 
     return {
         "lap_number": lap_num,
@@ -116,7 +93,7 @@ def get_simulated_lap(lap_num: int, mode: str = "HOTLAP"):
         "s1": s1,
         "s2": s2,
         "s3": s3,
-        "mode": mode.upper(),
+        "mode": "RACE",
     }
 
 
@@ -124,34 +101,28 @@ def get_simulated_lap(lap_num: int, mode: str = "HOTLAP"):
 def get_modes():
     return {
         "modes": {
-            "HOTLAP": {
-                "benchmark_lap": "1:20.161",
-                "fuel_load_kg": 12.0,
-                "tyre_compound": "SOFT (C4)",
-                "ers_mode": "HOTLAP QUALIFYING DEPLOY (100%)",
-                "sectors": {"s1": 27.412, "s2": 37.224, "s3": 15.525},
-                "max_speed_kmh": 345.5,
-            },
-            "ENDURANCE": {
+            "RACE": {
                 "benchmark_lap": "1:24.230",
                 "fuel_load_kg": 105.0,
                 "tyre_compound": "MEDIUM (C3)",
                 "ers_mode": "RACE BALANCED (HARVEST/DEPLOY)",
                 "sectors": {"s1": 28.640, "s2": 39.180, "s3": 16.410},
-                "max_speed_kmh": 330.0,
-            },
+                "max_speed_kmh": 343.0,
+            }
         }
     }
 
 
 @app.get("/telemetry/laps")
-def get_laps(mode: str = "HOTLAP"):
-    mode_clean = mode.upper() if mode else "HOTLAP"
-    laps = [get_simulated_lap(i, mode_clean) for i in range(1, 11)]
+def get_laps(mode: str = "RACE"):
+    laps = [get_simulated_lap(i, "RACE") for i in range(1, 11)]
     return {
         "circuit": "Autodromo Nazionale Monza",
-        "mode": mode_clean,
-        "benchmark": "1:24.230" if mode_clean == "ENDURANCE" else "1:20.161",
+        "mode": "RACE",
+        "benchmark": "1:24.230",
+        "driver": "Charles Leclerc (#16 Ferrari F1-75)",
+        "fuel_kg": 105.0,
+        "tyre_compound": "MEDIUM (C3)",
         "laps": laps,
     }
 
@@ -244,9 +215,9 @@ def get_interpolated_frame(idx_float: float):
 @app.websocket("/telemetry/ws")
 async def telemetry_ws(websocket: WebSocket):
     """
-    WebSocket endpoint streaming authentic FastF1 Monza qualifying telemetry at 20 Hz.
+    WebSocket endpoint streaming authentic FastF1 Monza Grand Prix race stint telemetry at 20 Hz.
     Uses sub-frame linear interpolation for fluid rendering on the client.
-    Charles Leclerc 2022 Italian GP Pole Lap (1:20.161) — 12 kg fuel, Soft C4.
+    Charles Leclerc 2022 Italian GP Race Stint (1:24.230 baseline) — 105 kg fuel, Medium C3 tyres.
     """
     await websocket.accept()
     logger.info("WebSocket client connected: %s", websocket.client)
@@ -261,12 +232,12 @@ async def telemetry_ws(websocket: WebSocket):
     idx_float = 0.0
     lap_number = 1
 
-    fastest_lap_ms = 80161
-    fastest_lap_time = 80.161
+    fastest_lap_ms = 84230
+    fastest_lap_time = 84.230
     fastest_lap_num = 1
 
     step_duration = 0.050  # 20 Hz
-    lap_target_sec = 80.161
+    lap_target_sec = 84.230
     idx_step = total_frames / (lap_target_sec / step_duration)
 
     try:
@@ -281,14 +252,19 @@ async def telemetry_ws(websocket: WebSocket):
             ax_adj       = frame["ax"]
             speed_adj    = frame["speed"]
             rpm_adj      = frame["rpm"]
-            fuel_kg      = max(2.5, round(12.0 - (lap_number - 1) * 2.2 - (frame["progress"] * 2.2), 2))
-            tyre_compound = "SOFT (C4)"
-            ers_mode      = "HOTLAP QUALIFYING DEPLOY (100%)"
-            driver_desc   = "Charles Leclerc (Q3 Qualifying Pole)"
-            tyre_fl = round(13.0 + lap_number * 2.5, 1)
-            tyre_fr = round(11.0 + lap_number * 2.0, 1)
-            tyre_rl = round(11.0 + lap_number * 2.2, 1)
-            tyre_rr = round(10.0 + lap_number * 1.8, 1)
+            fuel_kg      = max(3.0, round(105.0 - (lap_number - 1) * 1.90 - (frame["progress"] * 1.90), 2))
+            tyre_compound = "MEDIUM (C3)"
+            ers_mode      = "RACE BALANCED (HARVEST/DEPLOY)"
+            driver_desc   = "Charles Leclerc (#16 Ferrari F1-75 - Race Stint)"
+            tyre_fl = min(100.0, round(8.0 + (lap_number - 1) * 2.2 + frame["progress"] * 2.2, 1))
+            tyre_fr = min(100.0, round(7.0 + (lap_number - 1) * 1.9 + frame["progress"] * 1.9, 1))
+            tyre_rl = min(100.0, round(6.5 + (lap_number - 1) * 1.8 + frame["progress"] * 1.8, 1))
+            tyre_rr = min(100.0, round(6.0 + (lap_number - 1) * 1.7 + frame["progress"] * 1.7, 1))
+            bt_fl   = round(520.0 + (brake_adj / 100.0) * 520.0, 1)
+            bt_fr   = round(518.0 + (brake_adj / 100.0) * 520.0, 1)
+            bt_rl   = round(470.0 + (brake_adj / 100.0) * 440.0, 1)
+            bt_rr   = round(468.0 + (brake_adj / 100.0) * 440.0, 1)
+            eng_cond = round(max(90.0, 99.5 - (lap_number - 1) * 0.18), 1)
 
             # Alerts generation: strictly ONE distinct active event at a time
             alerts = []
@@ -310,7 +286,7 @@ async def telemetry_ws(websocket: WebSocket):
             packet = {
                 "type": "telemetry_update",
                 "timestamp": now_ts,
-                "telemetry_mode": "HOTLAP",
+                "telemetry_mode": "RACE",
                 "fuel_kg": fuel_kg,
                 "tyre_compound": tyre_compound,
                 "ers_mode": ers_mode,
@@ -321,7 +297,7 @@ async def telemetry_ws(websocket: WebSocket):
                     "fastest_lap_number": fastest_lap_num,
                     "driver": driver_desc,
                     "car": "#16 Ferrari F1-75",
-                    "telemetry_mode": "HOTLAP",
+                    "telemetry_mode": "RACE",
                 },
                 "lap_completed": lap_just_finished,
                 "raw": {
@@ -355,16 +331,16 @@ async def telemetry_ws(websocket: WebSocket):
                     "temperature": {
                         "coolant_temperature": frame["coolant_temp"],
                         "engine_temperature": frame["engine_temp"],
-                        "brake_temp_fl": frame["brake_temp_fl"],
-                        "brake_temp_fr": frame["brake_temp_fr"],
-                        "brake_temp_rl": frame["brake_temp_rl"],
-                        "brake_temp_rr": frame["brake_temp_rr"],
+                        "brake_temp_fl": bt_fl,
+                        "brake_temp_fr": bt_fr,
+                        "brake_temp_rl": bt_rl,
+                        "brake_temp_rr": bt_rr,
                     },
                     "wheel_speeds": {
                         "front_left": speed_adj,
                         "front_right": speed_adj,
-                        "rear_left": speed_adj,
-                        "rear_right": speed_adj,
+                        "rear_left": round(speed_adj + (1.2 if throttle_adj > 85 else 0.0), 1),
+                        "rear_right": round(speed_adj + (1.2 if throttle_adj > 85 else 0.0), 1),
                     },
                     "tyre_wear": {
                         "fl": tyre_fl,
@@ -378,7 +354,7 @@ async def telemetry_ws(websocket: WebSocket):
                         "sequence_number": seq,
                         "sampling_rate": 20,
                         "status_error_information": "OK",
-                        "transmission_information": "FastF1 Telemetry",
+                        "transmission_information": "FastF1 Telemetry (Monza GP)",
                     },
                     "track_x": frame["track_x"],
                     "track_y": frame["track_y"],
@@ -394,6 +370,8 @@ async def telemetry_ws(websocket: WebSocket):
                     "fuel_kg": fuel_kg,
                     "tyre_compound": tyre_compound,
                     "ers_mode": ers_mode,
+                    "speedTrap": 343.0,
+                    "engine_condition": eng_cond,
                 },
                 "processed": {
                     "longitudinal_acceleration": ax_adj,
@@ -415,7 +393,7 @@ async def telemetry_ws(websocket: WebSocket):
                 idx_float -= total_frames
                 prev_lap_num = lap_number
                 lap_number += 1
-                lap_just_finished = get_simulated_lap(prev_lap_num, "HOTLAP")
+                lap_just_finished = get_simulated_lap(prev_lap_num, "RACE")
                 packet["lap_completed"] = lap_just_finished
                 if lap_just_finished["lap_time_ms"] < fastest_lap_ms:
                     fastest_lap_ms = lap_just_finished["lap_time_ms"]

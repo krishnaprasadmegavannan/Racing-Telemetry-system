@@ -47,7 +47,7 @@ export default function App() {
               <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
                 {data?.transmission_information?.includes('ESP32')
                   ? `HARDWARE LINK // ${data.transmission_information} (DUAL ESP32)`
-                  : 'HOTLAP QUALIFYING // FASTF1 MONZA (12KG FUEL, SOFT C4)'}
+                  : 'MONZA GRAND PRIX // FASTF1 RACE PACE (105KG FUEL, MEDIUM C3)'}
               </span>
             </div>
           </div>

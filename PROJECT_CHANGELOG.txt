@@ -169,17 +169,37 @@ Solution:
 
 
 --------------------------------------------------------------------------------
-8. PRODUCTION BUILDS & DEPLOYMENTS
+9. RACE DAY DEFAULT SETUP & DATA CORRELATION HARMONIZATION
 --------------------------------------------------------------------------------
-  - Configured Vite build and automated `copyDist.cjs` synchronization.
-  - Deployed multiple production revisions to Vercel:
-      * Production URL: https://telemetry-project-theta.vercel.app
-  - Live Validation:
-      * `GET /health`: Verified HTTP 200 (`{"status":"healthy","service":"racing-telemetry-pitwall"}`)
-      * `GET /telemetry/laps`: Verified single HOTLAP 10-lap progression with dynamic PB tracking.
-      * `WSS /telemetry/ws`: Verified live 20 Hz (50 ms cadence) continuous streaming.
-  - Version Control:
-      * All changes committed to git master branch (`519d5dd`, `e72efdc`).
+Problem:
+  - Telemetry setup was configured for Qualifying trim (12 kg fuel, Soft C4 tyres,
+    1:20.161 pole time) which did not match race day conditions.
+  - Minor data mismatches existed between components:
+      * Speed trap gauge displayed 350 km/h default while car peaked at 343 km/h.
+      * Chart statistics displayed 19,500 RPM max for a 12,500 RPM F1 engine.
+      * Brake temp defaults were 830°C / 888°C instead of calibrated 520°C / 470°C.
+      * Engine damage showed 10.0% instead of engine health/condition.
+      * Last lap card still showed "QUALI" badge.
+Solution:
+  - Transitioned the entire telemetry pipeline to authentic Race Day setup:
+      * Baseline Lap Pace: 1:24.230 (84.230s - authentic race stint pace with full fuel).
+      * Fuel Load: Starting 105.0 kg race fuel burning down at ~1.90 kg per lap.
+      * Tyre Compound: MEDIUM (C3) starting race compound with calibrated wear.
+      * ERS Mode: "RACE BALANCED (HARVEST/DEPLOY)".
+      * Driver & Stint: "Charles Leclerc (#16 Ferrari F1-75 - Race Stint)".
+      * Target Sectors: S1: 28.640s, S2: 39.180s, S3: 16.410s (Sum = 84.230s).
+      * Realistic Race Progression: 1:24.230 base, 1:23.890 lap 4 stint best,
+        1:23.740 lap 9 stint best.
+  - Harmonized all cross-component telemetry correlations:
+      * Speed Trap: Set to 343.0 km/h matching actual VMAX on Rettifilo straight.
+      * RPM Scale: Y-domain set to [6,000, 13,000] RPM, stats set to Min 6,635,
+        Max 12,205, Avg 10,450 RPM.
+      * Brake Temperatures: Front disc baseline 520°C -> 1040°C threshold braking;
+        Rear disc baseline 470°C -> 910°C.
+      * Wheel Speeds: Front wheels match vehicle speed; rear wheels reflect +1.2 km/h
+        acceleration slip under full throttle (>85%).
+      * Engine Condition: Replaced "Engine Damage: 10%" with "Engine Condition: 99.2%".
+      * Badges: Aligned all UI cards to "RACE".
 
 ================================================================================
 END OF CHRONICLE

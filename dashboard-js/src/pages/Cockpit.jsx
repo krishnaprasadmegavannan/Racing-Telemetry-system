@@ -58,10 +58,10 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
                 DRS: <strong className={data?.drs ? "text-emerald-400" : "text-slate-400"}>{data?.drs ? "OPEN" : "CLOSED"}</strong>
               </span>
               <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">
-                FUEL: <strong className="text-amber-400 font-mono">{data?.fuel_kg !== undefined ? `${data.fuel_kg} kg` : (lapTiming?.fuelKg ? `${lapTiming.fuelKg} kg` : '12.0 kg')}</strong>
+                FUEL: <strong className="text-amber-400 font-mono">{data?.fuel_kg !== undefined ? `${data.fuel_kg} kg` : (lapTiming?.fuelKg ? `${lapTiming.fuelKg} kg` : '105.0 kg')}</strong>
               </span>
               <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">
-                TYRE: <strong className="text-cyan-400 font-mono">{data?.tyre_compound || lapTiming?.compound || 'SOFT (C4)'}</strong>
+                TYRE: <strong className="text-cyan-400 font-mono">{data?.tyre_compound || lapTiming?.compound || 'MEDIUM (C3)'}</strong>
               </span>
             </div>
           </div>
@@ -89,10 +89,10 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
                   ? `${currentSectorSec}s`
                   : lapTiming?.sector1Ms 
                     ? `${(lapTiming.sector1Ms / 1000).toFixed(3)}s` 
-                    : (lapTiming?.fastestSector1Formatted || '27.412s')}
+                    : (lapTiming?.fastestSector1Formatted || '28.640s')}
               </span>
               <span className="text-[9px] text-slate-500 block mt-0.5">
-                Target: {lapTiming?.fastestSector1Formatted || '27.412s'}
+                Target: {lapTiming?.fastestSector1Formatted || '28.640s'}
               </span>
             </div>
 
@@ -122,11 +122,11 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
                 {activeSector === 2 
                   ? `${currentSectorSec}s`
                   : activeSector > 2
-                    ? (lapTiming?.sector2Ms ? `${(lapTiming.sector2Ms / 1000).toFixed(3)}s` : (lapTiming?.fastestSector2Formatted || '37.224s'))
+                    ? (lapTiming?.sector2Ms ? `${(lapTiming.sector2Ms / 1000).toFixed(3)}s` : (lapTiming?.fastestSector2Formatted || '39.180s'))
                     : '--.---s'}
               </span>
               <span className="text-[9px] text-slate-500 block mt-0.5">
-                Target: {lapTiming?.fastestSector2Formatted || '37.224s'}
+                Target: {lapTiming?.fastestSector2Formatted || '39.180s'}
               </span>
             </div>
 
@@ -150,7 +150,7 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
                 {activeSector === 3 ? `${currentSectorSec}s` : '--.---s'}
               </span>
               <span className="text-[9px] text-slate-500 block mt-0.5">
-                Target: {lapTiming?.fastestSector3Formatted || '15.525s'}
+                Target: {lapTiming?.fastestSector3Formatted || '16.410s'}
               </span>
             </div>
           </div>
@@ -171,14 +171,14 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
 
           <div className="flex items-baseline justify-between my-1">
             <div className="text-3xl font-black text-white font-mono tracking-tight flex items-baseline gap-2">
-              <span className="text-purple-400">{lapTiming?.fastestLapFormatted || '1:20.161'}</span>
+              <span className="text-purple-400">{lapTiming?.fastestLapFormatted || '1:24.230'}</span>
             </div>
             <div className="text-right">
               <span className="text-[11px] text-slate-400 block font-bold">
                 LAP {lapTiming?.fastestLapNumber || 1}
               </span>
               <span className="text-[10px] text-purple-400">
-                {lapTiming?.fastestDriver || 'Charles Leclerc (Q3 Pole)'}
+                {lapTiming?.fastestDriver || 'Charles Leclerc (Race Stint)'}
               </span>
             </div>
           </div>
@@ -187,15 +187,15 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-center text-[11px]">
             <div className="bg-[#19152b] py-1 px-1.5 rounded border border-purple-500/20">
               <span className="text-[9px] text-slate-400 block">S1 BEST</span>
-              <span className="font-bold text-purple-300">{lapTiming?.fastestSector1Formatted || '27.412s'}</span>
+              <span className="font-bold text-purple-300">{lapTiming?.fastestSector1Formatted || '28.640s'}</span>
             </div>
             <div className="bg-[#19152b] py-1 px-1.5 rounded border border-purple-500/20">
               <span className="text-[9px] text-slate-400 block">S2 BEST</span>
-              <span className="font-bold text-purple-300">{lapTiming?.fastestSector2Formatted || '37.224s'}</span>
+              <span className="font-bold text-purple-300">{lapTiming?.fastestSector2Formatted || '39.180s'}</span>
             </div>
             <div className="bg-[#19152b] py-1 px-1.5 rounded border border-purple-500/20">
               <span className="text-[9px] text-slate-400 block">S3 BEST</span>
-              <span className="font-bold text-purple-300">{lapTiming?.fastestSector3Formatted || '15.525s'}</span>
+              <span className="font-bold text-purple-300">{lapTiming?.fastestSector3Formatted || '16.410s'}</span>
             </div>
           </div>
         </div>

@@ -80,34 +80,34 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
         {/* Gauge 1: Speed Trap */}
         <F1Gauge
           title="Speed Trap"
-          value={data?.speedTrap || 350.0}
+          value={data?.speedTrap || 343.0}
           min={0}
           max={360}
           unit="km/h"
           color="multi"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Gauge 2: Front Left Tyre Wear */}
         <F1Gauge
           title="Front Left Tyre Wear"
-          value={data?.tyre_wear_fl || 13.0}
+          value={data?.tyre_wear_fl || 8.0}
           min={0}
           max={100}
           unit="%"
           color="green"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Gauge 3: Front Right Tyre Wear */}
         <F1Gauge
           title="Front Right Tyre Wear"
-          value={data?.tyre_wear_fr || 11.0}
+          value={data?.tyre_wear_fr || 7.0}
           min={0}
           max={100}
           unit="%"
           color="green"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Card 4: Tyre Age Lap */}
@@ -125,15 +125,15 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
               <span className="w-1.5 h-1 bg-emerald-500/20 rounded-sm" />
             </div>
           </div>
-          <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-            {data?.tyre_compound || lapTiming?.compound || 'SOFT (C4)'}
+          <span className="text-[10px] text-amber-400 uppercase tracking-widest font-bold">
+            {data?.tyre_compound || lapTiming?.compound || 'MEDIUM (C3)'}
           </span>
         </div>
 
         {/* Gauge 5: Front Left Brake Temp */}
         <F1Gauge
           title="Front Left Tyre Brake Temp"
-          value={data?.brake_temp_fl || 830}
+          value={data?.brake_temp_fl || 520}
           min={0}
           max={1200}
           unit="°C"
@@ -144,7 +144,7 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
         {/* Gauge 6: Front Right Brake Temp */}
         <F1Gauge
           title="Front Right Tyre Brake Temp"
-          value={data?.brake_temp_fr || 829}
+          value={data?.brake_temp_fr || 518}
           min={0}
           max={1200}
           unit="°C"
@@ -163,10 +163,10 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
             </span>
           </div>
           <div className="my-auto text-purple-400 font-bold text-base leading-tight text-center lg:text-left font-mono">
-            {lapTiming?.fastestLapFormatted || '1:20.161'}
+            {lapTiming?.fastestLapFormatted || '1:24.230'}
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400">
-            <span className="truncate max-w-[130px]">{lapTiming?.fastestDriver || 'LECLERC (POLE)'}</span>
+            <span className="truncate max-w-[130px]">{lapTiming?.fastestDriver || 'LECLERC (RACE)'}</span>
             <span className="text-purple-400 font-bold">LAP {lapTiming?.fastestLapNumber || 1}</span>
           </div>
         </div>
@@ -180,46 +180,46 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
           max={360}
           unit="km/h"
           color="red"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Gauge 9: Rear Left Tyre Wear */}
         <F1Gauge
           title="Rear Left Tyre Wear"
-          value={data?.tyre_wear_rl || 11.0}
+          value={data?.tyre_wear_rl || 6.5}
           min={0}
           max={100}
           unit="%"
           color="green"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Gauge 10: Rear Right Tyre Wear */}
         <F1Gauge
           title="Rear Right Tyre Wear"
-          value={data?.tyre_wear_rr || 10.0}
+          value={data?.tyre_wear_rr || 6.0}
           min={0}
           max={100}
           unit="%"
           color="green"
-          decimals={2}
+          decimals={1}
         />
 
-        {/* Gauge 11: Engine Damage / Condition */}
+        {/* Gauge 11: Engine Condition */}
         <F1Gauge
-          title="Engine Damage"
-          value={data?.engine_damage || 10.0}
+          title="Engine Condition"
+          value={data?.engine_condition || 99.2}
           min={0}
           max={100}
           unit="%"
           color="green"
-          decimals={2}
+          decimals={1}
         />
 
         {/* Gauge 12: Rear Left Brake Temp */}
         <F1Gauge
           title="Rear Left Tyre Brake Temp"
-          value={data?.brake_temp_rl || 888}
+          value={data?.brake_temp_rl || 470}
           min={0}
           max={1200}
           unit="°C"
@@ -230,7 +230,7 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
         {/* Gauge 13: Rear Right Brake Temp */}
         <F1Gauge
           title="Rear Right Tyre Brake Temp"
-          value={data?.brake_temp_rr || 887}
+          value={data?.brake_temp_rr || 468}
           min={0}
           max={1200}
           unit="°C"
@@ -246,11 +246,11 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
           <div className="my-auto text-emerald-400 font-bold text-sm leading-tight text-center lg:text-left font-mono">
             {lapTiming?.lastLapFormatted && lapTiming.lastLapFormatted !== '--:--.---'
               ? lapTiming.lastLapFormatted
-              : '1:20.161'}
+              : '1:24.230'}
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
             <span>DELTA: <strong className={lapTiming?.lastLapDelta === 'PURPLE' ? 'text-purple-400' : 'text-emerald-400'}>{lapTiming?.lastLapDelta || '±0.000'}</strong></span>
-            <span className="text-amber-500 font-bold">QUALI</span>
+            <span className="text-emerald-400 font-bold">RACE</span>
           </div>
         </div>
 
@@ -276,9 +276,9 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
               <span className="w-2.5 h-0.5 bg-emerald-500 inline-block" />
               car engine rpm
             </span>
-            <span>Min: <strong className="text-white">{stats.rpmMin || 6000} rpm</strong></span>
-            <span>Max: <strong className="text-white">{stats.rpmMax || 19500} rpm</strong></span>
-            <span>Avg: <strong className="text-white">{stats.rpmAvg || 12000} rpm</strong></span>
+            <span>Min: <strong className="text-white">{stats.rpmMin || 6635} rpm</strong></span>
+            <span>Max: <strong className="text-white">{stats.rpmMax || 12205} rpm</strong></span>
+            <span>Avg: <strong className="text-white">{stats.rpmAvg || 10450} rpm</strong></span>
           </div>
 
           <div className="flex-grow w-full">
@@ -291,7 +291,7 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="time" hide />
-                <YAxis domain={[5000, 20000]} stroke="#475569" fontSize={9} />
+                <YAxis domain={[6000, 13000]} stroke="#475569" fontSize={9} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px', borderRadius: '8px' }}
                   itemStyle={{ color: '#22c55e' }}
@@ -318,9 +318,9 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
               <span className="w-2.5 h-0.5 bg-emerald-500 inline-block" />
               car speed
             </span>
-            <span>Min: <strong className="text-white">{stats.speedMin || 0} km/h</strong></span>
-            <span>Max: <strong className="text-white">{stats.speedMax || 350} km/h</strong></span>
-            <span>Avg: <strong className="text-white">{stats.speedAvg || 220} km/h</strong></span>
+            <span>Min: <strong className="text-white">{stats.speedMin || 73} km/h</strong></span>
+            <span>Max: <strong className="text-white">{stats.speedMax || 343} km/h</strong></span>
+            <span>Avg: <strong className="text-white">{stats.speedAvg || 258} km/h</strong></span>
           </div>
 
           <div className="flex-grow w-full">

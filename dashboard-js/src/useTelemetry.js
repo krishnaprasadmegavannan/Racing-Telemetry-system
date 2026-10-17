@@ -31,21 +31,21 @@ function msToDeltaString(ms) {
   return `${sign}${(abs / 1000).toFixed(3)}`;
 }
 
-// ── Single Monza qualifying preset ────────────────────────────────────────────
+// ── Single Monza Race Day preset ──────────────────────────────────────────────
 export const PRESET = {
-  baseMs: 80161,
-  formatted: '1:20.161',
+  baseMs: 84230,
+  formatted: '1:24.230',
   driver: 'Charles Leclerc (#16 Ferrari F1-75)',
-  compound: 'SOFT (C4)',
-  fuelKg: 12.0,
-  s1Ms: 27412,
-  s2Ms: 37224,
-  s3Ms: 15525,
-  s1Str: '27.412s',
-  s2Str: '37.224s',
-  s3Str: '15.525s',
-  // Realistic lap delta sequence (ms) — repeating
-  deltas: [0, 324, 112, -215, 489, 720, -80, 250, -290, 510],
+  compound: 'MEDIUM (C3)',
+  fuelKg: 105.0,
+  s1Ms: 28640,
+  s2Ms: 39180,
+  s3Ms: 16410,
+  s1Str: '28.640s',
+  s2Str: '39.180s',
+  s3Str: '16.410s',
+  // Realistic race stint deltas (ms) — tyre thermal progression & fuel burn-off
+  deltas: [0, 485, 250, -340, 390, 920, 80, 660, -490, 1190],
 };
 
 function getSimulatedLapMs(lapNum) {
@@ -71,9 +71,9 @@ export function useTelemetry(url) {
   const [isConnected, setIsConnected] = useState(false);
   const [isStale, setIsStale]     = useState(false);
   const [stats, setStats]         = useState({
-    speedMin: 0, speedMax: 0, speedAvg: 0,
-    rpmMin: 0,   rpmMax: 0,   rpmAvg: 0,
-    speedTrap: 350.0,
+    speedMin: 73, speedMax: 343, speedAvg: 258,
+    rpmMin: 6635, rpmMax: 12205, rpmAvg: 10450,
+    speedTrap: 343.0,
   });
 
   // ── Lap timing state ──────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ export function useTelemetry(url) {
   const lastValidFrame       = useRef(null);
   const smoothedFrame        = useRef(null);    // holds lerp-smoothed display values
   const staleTimer           = useRef(null);
-  const maxSpeedEver         = useRef(350.0);
+  const maxSpeedEver         = useRef(343.0);
   const lapClockTimer        = useRef(null);
   const lastHardwarePacketMs = useRef(0);
   const lastExternalPacketMs = useRef(0);
@@ -316,12 +316,7 @@ export function useTelemetry(url) {
       const gear = (rawGear > 0 && Math.abs(rawGear - expectedGear) <= 1) ? rawGear : expectedGear;
 
       let rawRpm = Number(can.rpm ?? raw.rpm ?? 0);
-      let rpm = rawRpm;
-      if (speed > 80 && (rawRpm < 7500 || rawRpm > 14000)) {
-        rpm = Math.min(12500, Math.max(8800, 8500 + Math.round((speed % 40) * 85)));
-      } else if (speed <= 80 && rawRpm === 0) {
-        rpm = Math.max(4500, Math.round(speed * 60));
-      }
+      let rpm = rawRpm > 0 ? rawRpm : Math.max(4500, Math.round(speed * 35));
 
       let ax = Number(processed.longitudinal_acceleration ?? imu.ax ?? 0);
       let ay = Number(processed.lateral_acceleration      ?? imu.ay ?? 0);
@@ -339,7 +334,7 @@ export function useTelemetry(url) {
       const corneringIntensity = Math.min(100, Math.round((Math.abs(lat_g) / 4.5) * 100));
 
       const battery_voltage = Number(can.battery_voltage ?? lastValidFrame.current?.battery_voltage ?? 14.2);
-      const battery_current = Number(can.battery_current ?? lastValidFrame.current?.battery_current ?? (2.5 + (throttle / 100) * 1.5));
+      const battery_current = Number(can.battery_current ?? lastValidFrame.current?.battery_current ?? (2.2 + (throttle / 100) * 1.2));
       const powerKW = Number(((battery_voltage * battery_current) / 1000).toFixed(2));
 
       const wheel_fl = Number(wheels.front_left  ?? speed);
@@ -348,15 +343,15 @@ export function useTelemetry(url) {
       const wheel_rr = Number(wheels.rear_right  ?? (throttle > 85 ? speed + 1.2 : speed));
       const wheelSlipDelta = Number(Math.max(0, Math.max(wheel_rl, wheel_rr) - Math.min(wheel_fl, wheel_fr)).toFixed(1));
 
-      const brake_temp_fl = Number(temp.brake_temp_fl ?? (650 + (brake_pressure / 100) * 350));
-      const brake_temp_fr = Number(temp.brake_temp_fr ?? (648 + (brake_pressure / 100) * 350));
-      const brake_temp_rl = Number(temp.brake_temp_rl ?? (610 + (brake_pressure / 100) * 280));
-      const brake_temp_rr = Number(temp.brake_temp_rr ?? (608 + (brake_pressure / 100) * 280));
+      const brake_temp_fl = Number(temp.brake_temp_fl ?? raw.brake_temp_fl ?? (520 + (brake_pressure / 100) * 520));
+      const brake_temp_fr = Number(temp.brake_temp_fr ?? raw.brake_temp_fr ?? (518 + (brake_pressure / 100) * 520));
+      const brake_temp_rl = Number(temp.brake_temp_rl ?? raw.brake_temp_rl ?? (470 + (brake_pressure / 100) * 440));
+      const brake_temp_rr = Number(temp.brake_temp_rr ?? raw.brake_temp_rr ?? (468 + (brake_pressure / 100) * 440));
 
-      const tyre_wear_fl = Number(tyre.fl ?? 13.0);
-      const tyre_wear_fr = Number(tyre.fr ?? 11.0);
-      const tyre_wear_rl = Number(tyre.rl ?? 11.0);
-      const tyre_wear_rr = Number(tyre.rr ?? 10.0);
+      const tyre_wear_fl = Number(tyre.fl ?? raw.tyre_fl ?? Math.min(100, 8.0 + (lapNumber.current - 1) * 2.2));
+      const tyre_wear_fr = Number(tyre.fr ?? raw.tyre_fr ?? Math.min(100, 7.0 + (lapNumber.current - 1) * 1.9));
+      const tyre_wear_rl = Number(tyre.rl ?? raw.tyre_rl ?? Math.min(100, 6.5 + (lapNumber.current - 1) * 1.8));
+      const tyre_wear_rr = Number(tyre.rr ?? raw.tyre_rr ?? Math.min(100, 6.0 + (lapNumber.current - 1) * 1.7));
 
       const rawProgress = Number(raw.progress ?? 0);
       const progress = rawProgress > 0 ? rawProgress
@@ -380,9 +375,10 @@ export function useTelemetry(url) {
         if (!alreadyRecorded && backendLapMs > 5000) completeLap(backendLapMs, backendLapNum);
       }
 
-      const fuel_kg = Number(raw.fuel_kg ?? message.fuel_kg ?? 11.8);
+      const fuel_kg = Number(raw.fuel_kg ?? message.fuel_kg ?? Math.max(3.0, 105.0 - (lapNumber.current - 1) * 1.90));
       const tyre_compound = String(raw.tyre_compound ?? message.tyre_compound ?? PRESET.compound);
-      const ers_mode = String(raw.ers_mode ?? message.ers_mode ?? 'HOTLAP QUALIFYING DEPLOY (100%)');
+      const ers_mode = String(raw.ers_mode ?? message.ers_mode ?? 'RACE BALANCED (HARVEST/DEPLOY)');
+      const engine_condition = roundDec(Number(raw.engine_condition ?? Math.max(90.0, 99.5 - (lapNumber.current - 1) * 0.18)), 1);
 
       // ── Lerp smoothing — blend toward new frame (α=0.35 for fast values, 0.15 for slow) ──
       const prev = smoothedFrame.current;
@@ -444,7 +440,8 @@ export function useTelemetry(url) {
 
         tyre_wear_fl, tyre_wear_fr, tyre_wear_rl, tyre_wear_rr,
         tyre_age_lap: Number(tyre.age_lap ?? lapNumber.current),
-        engine_damage: 10.0,
+        engine_damage: roundDec(100.0 - engine_condition, 1),
+        engine_condition,
 
         battery_voltage, battery_current, powerKW,
         speedTrap: maxSpeedEver.current,
@@ -559,7 +556,7 @@ export function useTelemetry(url) {
       const lat         = roundDec(lerpNum(f1.latitude, f2.latitude), 6);
       const lon         = roundDec(lerpNum(f1.longitude, f2.longitude), 6);
       const src         = frac >= 0.5 ? f2 : f1;
-      const fuel_kg     = Math.max(2.5, roundDec(12.0 - (simLapNumber - 1) * 2.2 - (src.progress * 2.2), 2));
+      const fuel_kg     = Math.max(3.0, roundDec(105.0 - (simLapNumber - 1) * 1.90 - (src.progress * 1.90), 2));
 
       // Lap wrap-around lap completion
       let lapCompleted = null;
@@ -591,7 +588,7 @@ export function useTelemetry(url) {
         timestamp: Date.now() / 1000,
         fuel_kg,
         tyre_compound: PRESET.compound,
-        ers_mode: 'HOTLAP QUALIFYING DEPLOY (100%)',
+        ers_mode: 'RACE BALANCED (HARVEST/DEPLOY)',
         lap_completed: lapCompleted,
         raw: {
           gps: { latitude: lat, longitude: lon, altitude: 183.0, speed: speed_adj,
@@ -602,24 +599,26 @@ export function useTelemetry(url) {
             az: 9.81, gx: 0.0, gy: 0.0, gz: roundDec((src.lat_g || 0) * 0.12, 3) },
           temperature: { coolant_temperature: roundDec(lerpNum(f1.coolant_temp, f2.coolant_temp), 1),
             engine_temperature: roundDec(lerpNum(f1.engine_temp, f2.engine_temp), 1),
-            brake_temp_fl: roundDec(lerpNum(f1.brake_temp_fl, f2.brake_temp_fl), 1),
-            brake_temp_fr: roundDec(lerpNum(f1.brake_temp_fr, f2.brake_temp_fr), 1),
-            brake_temp_rl: roundDec(lerpNum(f1.brake_temp_rl, f2.brake_temp_rl), 1),
-            brake_temp_rr: roundDec(lerpNum(f1.brake_temp_rr, f2.brake_temp_rr), 1) },
+            brake_temp_fl: roundDec(520.0 + (brake / 100) * 520, 1),
+            brake_temp_fr: roundDec(518.0 + (brake / 100) * 520, 1),
+            brake_temp_rl: roundDec(470.0 + (brake / 100) * 440, 1),
+            brake_temp_rr: roundDec(468.0 + (brake / 100) * 440, 1) },
           wheel_speeds: { front_left: speed_adj, front_right: speed_adj,
-            rear_left: speed_adj, rear_right: speed_adj },
-          tyre_wear: { fl: roundDec(13.0 + simLapNumber * 2.5, 1),
-            fr: roundDec(11.0 + simLapNumber * 2.0, 1),
-            rl: roundDec(11.0 + simLapNumber * 2.2, 1),
-            rr: roundDec(10.0 + simLapNumber * 1.8, 1), age_lap: simLapNumber },
+            rear_left: roundDec(speed_adj + (throttle > 85 ? 1.2 : 0), 1),
+            rear_right: roundDec(speed_adj + (throttle > 85 ? 1.2 : 0), 1) },
+          tyre_wear: { fl: roundDec(8.0 + simLapNumber * 2.2, 1),
+            fr: roundDec(7.0 + simLapNumber * 1.9, 1),
+            rl: roundDec(6.5 + simLapNumber * 1.8, 1),
+            rr: roundDec(6.0 + simLapNumber * 1.7, 1), age_lap: simLapNumber },
           metadata: { timestamp: Date.now() / 1000, sequence_number: Math.round(idxFloat),
             sampling_rate: 20, status_error_information: 'OK',
-            transmission_information: 'FastF1 Telemetry (Monza)' },
+            transmission_information: 'FastF1 Telemetry (Monza GP)' },
           track_x, track_y, speed: speed_adj, rpm: rpm_adj, gear: src.gear,
           throttle, brake_pressure: brake, corner_name: src.corner_name,
           sector: src.sector, distance: roundDec(lerpNum(f1.distance_m, f2.distance_m), 1),
           progress: roundDec(lerpNum(f1.progress, f2.progress), 4),
-          fuel_kg, tyre_compound: PRESET.compound, ers_mode: 'HOTLAP QUALIFYING DEPLOY (100%)',
+          fuel_kg, tyre_compound: PRESET.compound, ers_mode: 'RACE BALANCED (HARVEST/DEPLOY)',
+          speedTrap: 343.0,
         },
         processed: {
           longitudinal_acceleration: roundDec(lerpNum(f1.ax, f2.ax), 2),
