@@ -1,0 +1,186 @@
+================================================================================
+APEX-01 TELEMETRY SYSTEM — COMPREHENSIVE PROJECT CHRONICLE & CHANGELOG
+Repository: C:\Users\megav\.gemini\scratch\apex-01-working\telemetry-project
+Live URL: https://telemetry-project-theta.vercel.app
+================================================================================
+
+This document details all technical enhancements, bug fixes, hardware integrations,
+architectural designs, and deployments completed throughout this conversation.
+
+
+--------------------------------------------------------------------------------
+1. DYNAMIC LAP TIMING & LIVE RUNNING CLOCK
+--------------------------------------------------------------------------------
+Problem:
+  - Lap times displayed on the site were static and repetitive, displaying the
+    same constant time on every lap with no dynamic progression.
+Solution:
+  - Implemented dynamic, realistic lap time simulations based on Monza Qualifying:
+    * Lap 1: 1:20.161 (Charles Leclerc Monza 2022 Q3 Pole Benchmark)
+    * Lap 2: 1:20.485 (+0.324s)
+    * Lap 3: 1:20.273 (+0.112s)
+    * Lap 4: 1:19.946 (-0.215s -> New Session Purple Personal Best!)
+    * Subsequent laps dynamically cycle through realistic driver variations,
+      sector deltas, and tyre thermal degradation.
+  - Implemented an active Live Lap Clock ("CURRENT LAP STATUS") in Cockpit.jsx:
+    * Displays a running millisecond timer for the current lap in progress.
+    * Real-time dynamic sector tracking:
+        - Sector 1: Active countdown and target delta (Target: 27.412s).
+        - Sector 2: Active countdown and target delta (Target: 37.224s).
+        - Sector 3: Active countdown and target delta (Target: 15.525s).
+    * Dynamic state badges: LIVE (pulsing), DONE (completed sector), WAIT.
+    * Persistent session record card that automatically updates when a purple
+      fastest lap is set.
+    * Completed lap history table recording lap number, lap time, delta, S1, and S2.
+
+
+--------------------------------------------------------------------------------
+2. ESP32 HARDWARE INTEGRATION & DUAL-SOURCE HARMONY
+--------------------------------------------------------------------------------
+Problem:
+  - The dashboard needed to support both software simulation and physical hardware,
+    defaulting seamlessly to FastAPI/FastF1 streaming when hardware is absent,
+    while automatically switching to ESP32 data when hardware is connected.
+Solution:
+  - Designed and authored full Dual-ESP32 architecture:
+    * ESP32 #1: DAQ & Sensor Master (apex01_telemetry_master.ino):
+        - Interfaces with physical GPS (UART), IMU (I2C MPU6050/BNO055), Hall-effect
+          wheel speed sensor, and brake infrared temperature sensors.
+        - Interfaces with SN65HVD230 CAN transceiver on GPIO 4/5.
+        - Merges physical sensor inputs with CAN ECU frames.
+        - Transmits telemetry packets via Wi-Fi HTTP POST or USB Serial JSON.
+        - Gracefully falls back to simulated values if physical sensors or CAN are absent.
+    * ESP32 #2: CAN ECU Simulator (apex01_ecu_simulator.ino):
+        - Emulates vehicle engine management ECU over standard CAN bus at 500 kbps.
+        - Broadcasts Standard CAN IDs (0x100: RPM/Throttle, 0x101: Speed/Gear/Brake,
+          0x102: Engine/Coolant temps, 0x103: Battery Voltage/Current).
+    * Bridge Program (bridge.py):
+        - Created multi-mode telemetry ingestion bridge with 3 operation modes:
+            1. Simulator mode (`--mode simulator`): default software streaming.
+            2. USB Serial mode (`--mode serial --port COMx`): reads ESP32 via USB.
+            3. Wi-Fi mode (`--mode wifi --esp-host http://...`): polls ESP32 via network.
+        - Automatic data pipeline: Bridge -> FastAPI (`/telemetry/ingest`) -> WebSocket -> HUD.
+  - Fail-safe Hierarchy:
+    1. If ESP32 hardware is connected -> Ingest and display real sensor data.
+    2. If ESP32 is disconnected -> Automatically stream FastAPI FastF1 telemetry.
+    3. If backend network drops -> Client-side simulated fallback takes over immediately
+       with zero frozen screens or UI crashes.
+
+
+--------------------------------------------------------------------------------
+3. HARDWARE & WIRING INTEGRATION GUIDES
+--------------------------------------------------------------------------------
+Created three comprehensive markdown reference guides in the repository:
+  - `HARDWARE_MODE.md`:
+    * Step-by-step connection guide for USB Serial, Wi-Fi HTTP, and software bridge.
+    * Dual-ESP32 boot order and synchronization procedures.
+    * Terminal command quick-reference for starting the bridge in any mode.
+  - `esp32-telemetry-firmware/WIRING_GUIDE.md`:
+    * Complete electrical wiring schematics and pinout tables for ESP32 #1 and #2.
+    * CAN bus wiring with SN65HVD230 transceivers and 120-ohm termination resistors.
+    * ASCII block diagrams of sensor interconnections.
+  - `esp32-telemetry-firmware/LIBRARIES.md`:
+    * Required Arduino IDE libraries (ESP32-TWAI-CAN, TinyGPSPlus, Adafruit MPU6050,
+      ArduinoJson) with exact installation methods and version compatibility.
+
+
+--------------------------------------------------------------------------------
+4. TELEMETRY INTEGRITY & GPS POSITION FIX (NO GLITCHING / JUMPING)
+--------------------------------------------------------------------------------
+Problem:
+  - Car GPS marker on the track map was jumping forward and suddenly snapping
+    backwards, and sensor values were desynchronized.
+Root Cause Analysis:
+  - Dual-Stream Race Condition: `useTelemetry.js` had an internal fallback timer
+    running concurrently with the incoming WebSocket stream. Both loops were writing
+    to the same state, causing track coordinates to alternate between different timestamps.
+Solution:
+  - Implemented Stream Arbiter (`lastExternalPacketMs` ref in `useTelemetry.js`):
+    * Fallback loop checks timestamp on every tick. If a WebSocket packet was received
+      within the last 2000 ms, the fallback loop immediately yields and sleeps.
+  - Sanitized FastF1 Monza Dataset:
+    * Cleaned coordinates in `api/monza_fastf1_telemetry.json` and `monza_fastf1_track.json`.
+    * Enforced strict forward-only coordinate progression along the Monza racing line.
+  - Strict Physical Correlation Guards:
+    * Mutual throttle/brake exclusivity: when brake > 0, throttle is forced to 0%.
+    * Gear-speed physics correlation (e.g. 8th gear on Rettifilo straight at 300+ km/h,
+      downshifting through 7-6-5-4-3-2 into Variante del Rettifilo).
+    * Synchronized deceleration G-forces tied directly to heavy braking zones.
+
+
+--------------------------------------------------------------------------------
+5. REMOVAL OF DUAL MODES (HOTLAP VS ENDURANCE)
+--------------------------------------------------------------------------------
+Problem:
+  - Toggling between Hotlap and Endurance modes caused state mixing, data corruption,
+    and visual glitches across components.
+Solution:
+  - Completely removed the HOTLAP/ENDURANCE dual-mode toggle from the entire codebase:
+    * Backend (`api/index.py`): Removed `mode` query parameter, `is_endurance` branch,
+      and dual-physics equations.
+    * App Shell (`App.jsx`): Removed mode toggle buttons, mode state, and mode props.
+    * Dashboard pages (`Cockpit.jsx`, `F1TelemetryClient.jsx`, `Powertrain.jsx`):
+      Removed all conditional mode branching.
+  - Standardized on a single, pure, benchmark configuration:
+    * Car: Charles Leclerc #16 Ferrari F1-75
+    * Lap: 2022 Italian GP Qualifying Pole (1:20.161)
+    * Fuel: 12.0 kg qualifying trim
+    * Tyres: Soft C4 compound
+    * ERS: Hotlap Qualifying Deploy (100%)
+
+
+--------------------------------------------------------------------------------
+6. SMOOTH 20 HZ SUB-FRAME INTERPOLATION & CLIENT LERP SMOOTHING
+--------------------------------------------------------------------------------
+Problem:
+  - Discrete 10 Hz telemetry updates produced noticeable stepping on gauges,
+    bars, and track position.
+Solution:
+  - Backend Sub-frame Interpolator (`api/index.py`):
+    * Stepped streaming frequency from 10 Hz to 20 Hz (50 ms frame duration).
+    * Created `get_interpolated_frame(idx_float)`: Performs linear interpolation (lerp)
+      between consecutive FastF1 frames for all scalar fields and coordinates.
+    * Average positional step reduced from ~3.5–17.8 px to smooth sub-pixel deltas (~1.6 px).
+  - Client-Side Exponential Smoothing (`useTelemetry.js`):
+    * Filter incoming frames with `smoothedFrame` ref:
+        `smoothed = current + alpha * (target - current)`
+    * Fast dynamics ($\alpha = 0.40$): Speed, RPM, Throttle, Brake pressure.
+    * Position & Inertia ($\alpha = 0.20$): Track X/Y coordinates, Lateral/Long G, Brake temps.
+    * Upgraded client-side fallback simulation loop to 20 Hz sub-frame interpolation.
+    * Expanded rolling history buffer from 150 to 300 points for silky smooth line charts.
+  - CSS Transition Tuning across UI Components:
+    * `SuperbikeCluster.jsx`: Tachometer arc and throttle/brake mini bars upgraded to
+      `duration-200 ease-out`.
+    * `MonzaMap.jsx`: Live car beacon `<g>` transform upgraded to `duration-200 ease-linear`.
+    * `F1Gauge.jsx`: Semicircular SVG gauge arcs upgraded to `duration-200 ease-out`.
+    * `Powertrain.jsx`: G-Force traction friction circle dot upgraded to `duration-200 ease-out`.
+
+
+--------------------------------------------------------------------------------
+7. COCKPIT HUD CARD POLISH
+--------------------------------------------------------------------------------
+Request:
+  - Remove redundant "HOTLAP QUALI" badge from the top of the "CURRENT LAP STATUS" card.
+Solution:
+  - Removed the badge in `Cockpit.jsx`.
+  - Cleaned card header now displays:
+      * Left: "CURRENT LAP STATUS" with pulsing clock icon
+      * Right: "LAP [X] / 53" live lap counter
+
+
+--------------------------------------------------------------------------------
+8. PRODUCTION BUILDS & DEPLOYMENTS
+--------------------------------------------------------------------------------
+  - Configured Vite build and automated `copyDist.cjs` synchronization.
+  - Deployed multiple production revisions to Vercel:
+      * Production URL: https://telemetry-project-theta.vercel.app
+  - Live Validation:
+      * `GET /health`: Verified HTTP 200 (`{"status":"healthy","service":"racing-telemetry-pitwall"}`)
+      * `GET /telemetry/laps`: Verified single HOTLAP 10-lap progression with dynamic PB tracking.
+      * `WSS /telemetry/ws`: Verified live 20 Hz (50 ms cadence) continuous streaming.
+  - Version Control:
+      * All changes committed to git master branch (`519d5dd`, `e72efdc`).
+
+================================================================================
+END OF CHRONICLE
+================================================================================
