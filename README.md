@@ -1,4 +1,4 @@
-# Racing Telemetry | Pitwall (Project Apex-01)
+# Racing Telemetry | Pitwall (Project Racing Telemetry system)
 ### Real-Time Formula 1 Telemetry & Data Acquisition System
 
 **Live Production Demonstration:** [https://telemetry-project-theta.vercel.app](https://telemetry-project-theta.vercel.app)
