@@ -1,99 +1,394 @@
-# Racing Telemetry | Pitwall (Project Racing Telemetry system)
-### Real-Time Formula 1 Telemetry & Data Acquisition System
+# Racing Telemetry | Pitwall — Project 
+### Formula 1 Telemetry, Data Acquisition & Vehicle Dynamics Visualization
 
-**Live Production Demonstration:** [https://telemetry-project-theta.vercel.app](https://telemetry-project-theta.vercel.app)
-
----
-
-## 1. Overview & Dataset
-
-**Racing Telemetry Pitwall** is a high-performance motorsport telemetry and data acquisition visualization platform. The telemetry engine is directly integrated with the **FastF1 Python Library**, extracting authentic real-world Formula 1 telemetry from the **2022 Italian Grand Prix at Autodromo Nazionale Monza** (Charles Leclerc Pole Position Lap — `1:20.161`).
-
-### Authentic Telemetry Physics & Correlations
-Every channel in the live data stream is physically correlated and synchronized:
-* **Speed & Gear Mapping**: 343 km/h in 8th gear on the Rettifilo Tribune straight with DRS active; 73 km/h in 2nd gear at Variante del Rettifilo (Turn 1 / Turn 2).
-* **Driver Pedal Inputs**: 100% full throttle on straights transitioning to 100% threshold braking in heavy decel zones with 0% throttle.
-* **Longitudinal Acceleration ($a_x$)**: Massive decel up to $-4.8\text{ G}$ in braking zones, $+1.6\text{ G}$ under full-power traction.
-* **Lateral Acceleration ($a_y$)**: Realistic cornering loads up to $4.2\text{ G}$ through Curva Grande, Curve di Lesmo, Variante Ascari, and Curva Parabolica (Alboreto).
-* **Thermal Dynamics**: Brake disc temperatures heat up dynamically to over $850^\circ\text{C}$ in braking zones and cool down on high-speed straights.
-* **True Track Positioning**: The circuit map is rendered using a vector SVG path derived from the exact FastF1 spatial telemetry coordinates, guaranteeing the vehicle position marker is **100% on the tarmac at all times**.
+**Live Demonstration:** https://telemetry-project-theta.vercel.app
 
 ---
 
-## 2. Architecture & Components
+## 1. Project Overview
 
+**Racing Telemetry Pitwall** is a motorsport telemetry and data acquisition visualization platform designed to demonstrate how vehicle data can be collected, processed, streamed, and visualized through a real-time racing dashboard.
+
+The project combines telemetry from the **FastF1 Python library**, a Python-based telemetry streaming backend, a React dashboard, and a dual-ESP32 hardware architecture.
+
+The default demonstration replays telemetry derived from the **2022 Formula 1 Italian Grand Prix qualifying session at Monza**. The bundled dataset identifies Charles Leclerc's fastest lap as **1:20.161**.
+
+The system provides a motorsport-oriented interface for exploring vehicle speed, engine RPM, gear selection, driver inputs, vehicle dynamics, track position, and additional telemetry parameters.
+
+### Key Features
+
+- **Live Telemetry Visualization:** Displays streamed vehicle parameters through an interactive racing dashboard.
+- **FastF1 Integration:** Uses Formula 1 timing and telemetry data as the foundation for the Monza demonstration.
+- **Vehicle Dynamics:** Visualizes longitudinal and lateral acceleration, braking behaviour, and wheel-speed differences.
+- **Track Visualization:** Maps the telemetry samples onto a vector representation of the Monza circuit.
+- **Telemetry Processing:** Processes incoming data and prepares it for dashboard visualization.
+- **Dual-ESP32 Architecture:** Provides a hardware integration path for sensor acquisition and CAN-based communication.
+- **Simulation and Hardware Modes:** Supports software-based demonstrations while providing a framework for integrating physical hardware.
+
+> **Important:** The default demonstration combines recorded, calculated, and simulated data. It should not be interpreted as a complete set of directly measured vehicle parameters from a real Formula 1 car.
+
+---
+
+## 2. Dataset and Telemetry Sources
+
+The bundled dataset is derived from the 2022 Italian Grand Prix qualifying session using the FastF1 Python library.
+
+The extraction script is:
+
+`scripts/extract_fastf1_monza.py`
+
+The resulting dataset is stored in:
+
+`api/monza_fastf1_telemetry.json`
+
+### Recorded Telemetry
+
+The extracted FastF1 data includes channels such as:
+
+- Vehicle speed
+- Engine RPM
+- Gear selection
+- Throttle position
+- Brake input
+- DRS state
+- Lap distance
+- Timing information
+- Track-position coordinates
+
+The bundled dataset contains approximately 623 telemetry samples.
+
+### Derived Parameters
+
+Some parameters are calculated from the recorded data rather than directly supplied by FastF1.
+
+These include:
+
+- Longitudinal acceleration
+- Lateral acceleration
+- Estimated braking pressure
+- Vehicle dynamics indicators
+
+Derived values depend on the calculation method and the quality and resolution of the source data.
+
+### Simulated Parameters
+
+Certain parameters are modelled or generated for the demonstration because they are not directly available as measured values in the source dataset.
+
+Examples include:
+
+- Coolant and engine temperatures
+- Modelled brake temperatures
+- Battery voltage and current
+- Selected wheel-speed and slip values
+- Fuel and energy-management indicators
+- Additional vehicle-state information
+
+The dashboard combines these data sources to demonstrate how a broader motorsport telemetry interface can operate.
+
+### Dataset Characteristics
+
+The bundled dataset includes the following approximate ranges:
+
+| Parameter | Observed range |
+|---|---:|
+| Vehicle speed | 73–343 km/h |
+| Engine RPM | 6,635–12,205 RPM |
+| Gear selection | 2nd–8th gear |
+| Throttle position | 0–100% |
+| Longitudinal acceleration | Approximately -4.89 to +1.63 G |
+| Lateral acceleration | Approximately -2.66 to +2.79 G |
+
+These ranges describe the bundled dataset and its calculated channels. They are not universal Formula 1 performance limits.
+
+**Track positioning note:** The circuit visualization is derived from FastF1 track-position coordinates. Any latitude and longitude fields generated by mapping those coordinates are approximations, not measurements from a physical GPS receiver.
+
+---
+
+## 3. System Architecture
+
+The project is organized around four primary components:
+
+```text
+                 FastF1 Python Library
+                          |
+                          v
+             scripts/extract_fastf1_monza.py
+                          |
+                          v
+             api/monza_fastf1_telemetry.json
+                          |
+                          v
+                  Python Backend
+                          |
+                          v
+               WebSocket Telemetry Stream
+                          |
+                          v
+                React + Vite Dashboard
+                          |
+          +---------------+----------------+
+          |               |                |
+          v               v                v
+      Cockpit HUD    Vehicle Dynamics   Data Inspector
+      Track Map      Acceleration       Raw Telemetry
+      Speed / RPM    Wheel-Speed Data   Link Diagnostics
+      Sector Timing  Powertrain Data    Schema Inspection
 ```
-FastF1 Library ───> [scripts/extract_fastf1_monza.py]
-                             │
-                             ▼
-               [api/monza_fastf1_telemetry.json]
-                             │
-                             ▼
-                [api/index.py] (FastAPI Serverless)
-                             │
-                    WebSocket Stream (10 Hz)
-                             │
-                             ▼
-      [dashboard-js] (React 19 + Vite + Tailwind CSS v4)
-      ├── Cockpit HUD (Compact SuperbikeCluster, Monza Vector Map, Sector Timing)
-      ├── F1 Telemetry Client (14 Gauges, RPM, Speed, Pedals, Power Traces)
-      ├── Powertrain & Dynamics (G-G Friction Circle, 6-Axis IMU, Wheel Slip)
-      └── Schema & Hardware Inspector (Raw Data Inspector & Link Diagnostics)
-```
+
+### Dashboard Components
+
+The dashboard is designed to present several aspects of vehicle telemetry:
+
+**Cockpit HUD**
+- Speed and RPM displays
+- Gear and driver-input indicators
+- Circuit visualization
+- Lap and sector information
+
+**Telemetry Visualization**
+- Vehicle speed and RPM
+- Throttle and braking inputs
+- Time-series telemetry traces
+
+**Vehicle Dynamics**
+- Longitudinal and lateral acceleration
+- G-G friction-circle visualization
+- IMU-related data
+- Wheel-speed and slip indicators
+
+**Data and Diagnostics**
+- Raw telemetry inspection
+- Telemetry schema visualization
+- Connection and link diagnostics
+
+The displayed components depend on the data provided by the selected operating mode.
 
 ---
 
-## 3. Dual-ESP32 Hardware Integration & Harmony
+## 4. Dual-ESP32 Hardware Integration
 
-The system is architected for seamless dual-mode operation:
-* **Default Mode**: Operates out-of-the-box using the FastF1 Monza telemetry stream.
-* **Hardware Mode**: Connect your dual ESP32s (ESP32 #1 DAQ Master + ESP32 #2 ECU Simulator) to stream live hardware sensors, potentiometers, and CAN bus data without altering the backend or dashboard.
+Project Apex-01 is designed to support a dual-ESP32 architecture for physical telemetry acquisition.
 
-For complete wiring, CAN bus schematics, firmware upload steps, and physical correlation notes, see the dedicated guides:
-* 📘 [**Master Hardware Integration Guide**](file:///C:/Users/megav/.gemini/scratch/apex-01-working/telemetry-project/HARDWARE_INTEGRATION_GUIDE.md) — Dual-ESP32 architecture, launch checklist, and harmonization.
-* 🔌 [**Complete 53-Row Wiring Guide**](file:///C:/Users/megav/.gemini/scratch/apex-01-working/telemetry-project/esp32-telemetry-firmware/WIRING_GUIDE.md) — Pinout tables, pull-up resistors, and power distribution.
-* 📦 [**Firmware Libraries Guide**](file:///C:/Users/megav/.gemini/scratch/apex-01-working/telemetry-project/esp32-telemetry-firmware/LIBRARIES.md) — Required Arduino libraries and versions.
+### ESP32 #1 — DAQ Master
+
+The DAQ master is intended to collect and consolidate sensor measurements and communicate with the telemetry backend.
+
+Potential inputs include:
+
+- GPS position and speed
+- Accelerometer and gyroscope measurements
+- Temperature sensors
+- Wheel-speed sensors
+- Battery measurements
+- CAN bus messages
+
+### ESP32 #2 — ECU Simulator
+
+The second ESP32 is intended to simulate or provide vehicle-state information over the CAN bus.
+
+This architecture allows the project to explore communication between an acquisition unit and a separate vehicle-data source.
+
+### Operating Modes
+
+**Software Demonstration Mode**
+
+Uses the bundled FastF1-derived dataset and software-generated parameters. This mode allows the dashboard and telemetry-processing pipeline to be demonstrated without a connected vehicle.
+
+**Hardware Integration Mode**
+
+Provides the architecture and firmware for connecting physical sensors and ESP32 devices. Actual hardware measurements require the corresponding sensors, wiring, firmware configuration, and successful communication.
+
+> The availability of firmware and wiring documentation does not, by itself, establish that the complete physical system has been validated end to end.
+
+### Hardware Documentation
+
+Refer to the following files in the repository:
+
+- **Hardware Integration Guide:** `HARDWARE_INTEGRATION_GUIDE.md`
+- **Wiring Guide:** `esp32-telemetry-firmware/WIRING_GUIDE.md`
+- **Firmware Libraries:** `esp32-telemetry-firmware/LIBRARIES.md`
+
+These paths assume the files are located at the repository root or under the stated directories. Update the links if the files are stored elsewhere.
 
 ---
 
-## 4. Local Installation & Development
+## 5. Technology Stack
+
+| Component | Technology |
+|---|---|
+| Telemetry source | FastF1 Python library |
+| Data extraction | Python |
+| Backend | FastAPI |
+| Streaming | WebSockets |
+| Frontend | React |
+| Frontend build tool | Vite |
+| Styling | Tailwind CSS |
+| Embedded hardware | ESP32 |
+| Vehicle communication | CAN bus |
+| Deployment | Vercel |
+
+The Python backend and frontend serve different purposes: the backend prepares and streams telemetry, while the frontend renders the incoming data.
+
+---
+
+## 6. Local Installation and Development
 
 ### Prerequisites
-* Python 3.11+
-* Node.js 20+
 
-### Step 1: Install Python Dependencies & Virtualenv
+Install the following software:
+
+- Python 3.11 or a compatible version supported by the project's dependencies
+- Node.js 20 or a compatible version supported by the frontend dependencies
+- Git
+- Arduino IDE, if working with the ESP32 firmware
+
+### Step 1 — Clone the Repository
+
 ```bash
-python -m venv .venv
-.venv\Scripts\activate        # On Windows (or source .venv/bin/activate on Linux/macOS)
-pip install -r requirements.txt fastf1
+git clone https://github.com/krishnaprasadmegavannan/Racing-Telemetry-system.git
+cd Racing-Telemetry-system
 ```
 
-### Step 2: (Optional) Re-extract FastF1 Dataset
-To extract fresh telemetry directly from Formula 1 live timing cache via FastF1:
+### Step 2 — Set Up the Python Environment
+
+Create and activate a virtual environment.
+
+**Windows:**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+If using Command Prompt instead of PowerShell:
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+**Linux/macOS:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install the Python dependencies using the requirements file provided by the project:
+
+```bash
+pip install -r requirements.txt
+```
+
+If FastF1 is not included in the requirements file, install it separately:
+
+```bash
+pip install fastf1
+```
+
+Run these commands from the directory containing `requirements.txt`.
+
+### Step 3 — Prepare the Telemetry Dataset
+
+The pre-generated dataset can be used for the default demonstration if it is present in the repository.
+
+To regenerate it, run:
+
 ```bash
 python scripts/extract_fastf1_monza.py
 ```
 
-### Step 3: Run the Dashboard
+This step requires FastF1 and access to the relevant session data. Extraction may take time depending on cache availability and network access.
+
+### Step 4 — Start the Frontend
+
+Navigate to the frontend directory:
+
 ```bash
 cd dashboard-js
 npm install
 npm run dev
 ```
 
-### Step 4: Run the Telemetry Streamer Backend
+Open the local address printed by Vite in the terminal.
+
+### Step 5 — Start the Backend
+
+Open a second terminal and activate the same Python virtual environment.
+
+Run the backend command appropriate to the actual location of the FastAPI application.
+
+For example, **if `api/index.py` exists and exports `app`**, use:
+
 ```bash
-uvicorn api.index:app --host 0.0.0.0 --port 8000 --reload
+uvicorn api.index:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+If the backend is stored in a different directory, adjust the module path to match the repository.
+
+The frontend must also be configured to connect to the correct backend address. A running frontend alone does not guarantee that telemetry is being received.
 
 ---
 
-## 4. Production Deployment on Vercel
+## 7. Deployment
 
-The production deployment runs on Vercel Serverless:
-* **Frontend**: Static React single-page application built with Vite and Tailwind CSS.
-* **API & WebSocket**: Python 3.12 ASGI serverless function streaming FastF1 telemetry packets over `wss://`.
-* **Zero Deployment Auth Blockers**: Open public demonstration link accessible from any desktop, tablet, or mobile device.
+**Live Demonstration:** https://telemetry-project-theta.vercel.app
 
-**Production URL:** [https://telemetry-project-theta.vercel.app](https://telemetry-project-theta.vercel.app)
+The project includes a deployed web interface intended to provide access to the telemetry visualization without requiring users to install the local development environment.
+
+The deployment configuration determines how the frontend, API routes, and telemetry stream are hosted.
+
+### Deployment Considerations
+
+- The frontend must be built successfully.
+- API routes must resolve to the correct backend implementation.
+- WebSocket connections must be supported by the deployed architecture.
+- The client must connect to the correct production endpoint.
+- The telemetry dataset and other required assets must be available in the deployed environment.
+
+A publicly accessible frontend does not automatically confirm that every API endpoint or WebSocket stream is operational.
+
+---
+
+## 8. Project Scope and Limitations
+
+Project Apex-01 is a motorsport telemetry visualization and data-acquisition prototype.
+
+The current software demonstration uses a combination of recorded Formula 1 telemetry, derived vehicle-dynamics parameters, and simulated values.
+
+The following distinctions are important:
+
+- FastF1 data is not equivalent to direct access to a Formula 1 team's internal telemetry system.
+- Derived acceleration and braking estimates depend on the processing method.
+- Modelled temperatures and other synthetic parameters are not physical measurements.
+- Approximate track coordinates are not equivalent to live GPS measurements.
+- Hardware integration must be validated independently of software simulation.
+- Deployment functionality should be tested separately for the frontend, API, and WebSocket stream.
+
+These limitations do not prevent the project from demonstrating telemetry processing, visualization, embedded-system architecture, and vehicle-dynamics concepts. They define the scope of what the current implementation can reliably claim.
+
+---
+
+## 9. Future Improvements
+
+Potential future development includes:
+
+- Validating the complete dual-ESP32 acquisition pipeline with physical sensors
+- Integrating live CAN messages into the telemetry backend
+- Adding SD-card logging and offline data analysis
+- Improving synchronization between sensor streams
+- Comparing vehicle telemetry across laps
+- Adding lap-delta and sector-performance analysis
+- Implementing telemetry recording and replay controls
+- Improving deployment monitoring and connection diagnostics
+
+---
+
+## 10. Project Links
+
+- **Live Dashboard:** https://telemetry-project-theta.vercel.app
+- **GitHub Repository:** https://github.com/krishnaprasadmegavannan/Racing-Telemetry-system
+
+---
+
+**Project:** Racing Telemetry Pitwall — Project Apex-01  
+**Domain:** Motorsport Engineering, Telemetry, Embedded Systems and Vehicle Dynamics
