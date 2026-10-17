@@ -12,7 +12,7 @@ Usage examples:
   python bridge.py                          # software-only simulator mode
   python bridge.py --mode serial --port COM3
   python bridge.py --mode serial --port /dev/ttyUSB0 --baud 115200
-  python bridge.py --mode wifi   --esp-host 192.168.1.200
+  python bridge.py --mode wifi   --esp-host http://YOUR_ESP32_IP:80
 
 The simulator mode requires no hardware.  Serial and wifi modes require
 ESP32 #1 (apex01_telemetry_master) running and accessible.
@@ -49,7 +49,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--esp-host",
-    default="http://192.168.1.200:80",
+    default="http://YOUR_ESP32_IP:80",
     help="ESP32 #1 Wi-Fi HTTP host (wifi mode). Must expose POST /telemetry or GET /status.",
 )
 parser.add_argument(

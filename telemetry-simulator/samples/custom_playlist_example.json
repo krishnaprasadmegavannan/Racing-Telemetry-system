@@ -1,0 +1,26 @@
+[
+  {
+    "name": "normal_driving",
+    "duration_s": 18,
+    "target_speed_kmh": 90,
+    "weave_amplitude": 0.6,
+    "weave_period_s": 8.0,
+    "mu": 1.0
+  },
+  {
+    "name": "braking",
+    "duration_s": 6,
+    "brake_bar": 70.0,
+    "release_brake_below_kmh": 25.0,
+    "weave_period_s": 8.0,
+    "mu": 1.0
+  },
+  {
+    "name": "normal_driving",
+    "duration_s": 6,
+    "target_speed_kmh": 40,
+    "weave_amplitude": 0.6,
+    "weave_period_s": 8.0,
+    "mu": 1.0
+  }
+]

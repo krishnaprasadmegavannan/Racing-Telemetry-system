@@ -87,14 +87,14 @@ ESP32 #1 posts JSON to FastAPI over Wi-Fi. The bridge only polls and forwards.
 ```powershell
 ipconfig
 ```
-Note the **IPv4 Address** under your Wi-Fi adapter, e.g. `192.168.1.100`
+Note the **IPv4 Address** under your Wi-Fi adapter, e.g. `YOUR_COMPUTER_LAN_IP`
 
 ### Step 2 — Update ESP32 #1 firmware
 In `apex01_telemetry_master.ino`:
 ```cpp
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* SERVER_URL    = "http://192.168.1.100:8000/telemetry";  // ← your PC IP
+const char* SERVER_URL    = "http://YOUR_COMPUTER_LAN_IP:8000/telemetry";  // ← your PC IP
 ```
 
 ### Step 3 — Start FastAPI bound to all interfaces
@@ -106,7 +106,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 ### Step 4 — Run bridge in wifi mode (optional, for forwarding)
 ```powershell
-python bridge.py --mode wifi --esp-host http://192.168.1.200
+python bridge.py --mode wifi --esp-host http://YOUR_ESP32_IP
 ```
 
 Or if ESP32 posts directly to FastAPI, you can skip the bridge entirely.

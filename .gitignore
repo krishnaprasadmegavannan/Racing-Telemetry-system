@@ -1,7 +1,73 @@
-.env
+# Python virtual environments
 .venv/
-__pycache__/
-*.pyc
-.DS_Store
+venv/
+env/
 
-.vercel
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+secrets/
+credentials/
+*.pem
+*.key
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+build/
+.vercel/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Local databases and telemetry recordings
+*.db
+*.sqlite
+*.sqlite3
+*.log.*
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated reports and coverage
+coverage/
+
+# Generated files
+node_modules/
+__pycache__/
+*.py[cod]
+dist/
+build/
+.vercel/
+.pytest_cache/
+.coverage
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local analysis and downloaded caches
+scratch/
+*.ff1pkl
+
+scratch/
+*.ff1pkl

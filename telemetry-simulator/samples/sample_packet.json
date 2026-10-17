@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "schema_version": "1.0.0",
+    "device_id": "SIM-ESP32-01",
+    "timestamp": 1759651215000,
+    "sequence_number": 151,
+    "sampling_rate": 10.0,
+    "transmission_information": {
+      "transport": "stdout",
+      "boot_id": "a3b1799d",
+      "uptime_ms": 15000,
+      "rssi_dbm": -55
+    },
+    "status_error_information": {
+      "status": "OK",
+      "error_codes": []
+    }
+  },
+  "gps": {
+    "latitude": 28.3489706,
+    "longitude": 77.5347829,
+    "speed": 49.8,
+    "altitude": 199.0,
+    "satellite_count": 12,
+    "fix_status": "3D_FIX"
+  },
+  "imu": {
+    "ax": 0.03,
+    "ay": -0.508,
+    "az": 9.334,
+    "gx": 0.04,
+    "gy": 0.26,
+    "gz": -2.05
+  },
+  "temperature": {
+    "coolant_temperature": 88.4,
+    "engine_temperature": 96.1
+  },
+  "wheel_speeds": {
+    "front_left": 49.86,
+    "front_right": 49.92,
+    "rear_left": 50.02,
+    "rear_right": 49.8
+  },
+  "vehicle": {
+    "rpm": 2422,
+    "throttle": 6.2,
+    "brake_pressure": 0.1,
+    "battery_voltage": 13.95,
+    "battery_current": 2.96
+  }
+}

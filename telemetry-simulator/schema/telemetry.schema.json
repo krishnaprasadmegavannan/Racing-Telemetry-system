@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/telemetry/1.0.0/telemetry.schema.json",
+  "title": "Vehicle telemetry packet",
+  "description": "Person 1 -> Person 2 contract, schema_version 1.0.0. One packet = one sample. Body frame ISO 8855: x forward, y left, z up. Field names and units are frozen for this version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "gps", "imu", "temperature", "wheel_speeds", "vehicle"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "device_id", "timestamp", "sequence_number", "sampling_rate",
+                   "transmission_information", "status_error_information"],
+      "properties": {
+        "schema_version": { "type": "string", "pattern": "^1\\.\\d+\\.\\d+$", "description": "Semantic version of this contract" },
+        "device_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "timestamp": { "type": "integer", "minimum": 1000000000000, "description": "Unix time in milliseconds (13 digits; a 10-digit value means seconds were sent by mistake)" },
+        "sequence_number": { "type": "integer", "minimum": 1, "maximum": 4294967295, "description": "Starts at 1 on every boot, +1 per generated packet" },
+        "sampling_rate": { "type": "number", "exclusiveMinimum": 0, "description": "Hz" },
+        "transmission_information": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transport", "boot_id", "uptime_ms", "rssi_dbm"],
+          "properties": {
+            "transport": { "type": "string", "enum": ["stdout", "file", "udp", "http", "mqtt", "websocket", "serial"] },
+            "boot_id": { "type": "string", "pattern": "^[0-9a-f]{8}$", "description": "Random per power-up; a new boot_id explains a sequence_number reset to 1" },
+            "uptime_ms": { "type": "integer", "minimum": 0, "description": "Milliseconds since this boot" },
+            "rssi_dbm": { "type": ["integer", "null"], "minimum": -127, "maximum": 0, "description": "Radio signal strength; null on wired links" }
+          }
+        },
+        "status_error_information": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "error_codes"],
+          "properties": {
+            "status": { "type": "string", "enum": ["OK", "WARNING", "ERROR"] },
+            "error_codes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": ["GPS_NO_FIX", "GPS_LOW_SATELLITES",
+                         "COOLANT_TEMP_HIGH", "COOLANT_TEMP_CRITICAL",
+                         "ENGINE_TEMP_HIGH", "ENGINE_TEMP_CRITICAL",
+                         "BATTERY_VOLTAGE_LOW", "BATTERY_VOLTAGE_CRITICAL", "BATTERY_NOT_CHARGING",
+                         "SENSOR_READ_FAILURE"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "gps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude", "speed", "altitude", "satellite_count", "fix_status"],
+      "description": "latitude/longitude/speed/altitude are null when there is no fix; altitude is also null on a 2D fix. Never 0 as a placeholder.",
+      "properties": {
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90, "description": "degrees, WGS84" },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180, "description": "degrees, WGS84" },
+        "speed": { "type": ["number", "null"], "minimum": 0, "description": "km/h" },
+        "altitude": { "type": ["number", "null"], "description": "m above mean sea level" },
+        "satellite_count": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "fix_status": { "type": "string", "enum": ["NO_FIX", "2D_FIX", "3D_FIX"] }
+      }
+    },
+    "imu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ax", "ay", "az", "gx", "gy", "gz"],
+      "description": "Accelerometer reports specific force (gravity included: az is about +9.81 at rest on level ground).",
+      "properties": {
+        "ax": { "type": "number", "description": "m/s², longitudinal, + = accelerating forward" },
+        "ay": { "type": "number", "description": "m/s², lateral, + = toward the left (left turn)" },
+        "az": { "type": "number", "description": "m/s², vertical, + = up" },
+        "gx": { "type": "number", "description": "°/s roll rate about x" },
+        "gy": { "type": "number", "description": "°/s pitch rate about y, + = nose moving down" },
+        "gz": { "type": "number", "description": "°/s yaw rate about z, + = turning left" }
+      }
+    },
+    "temperature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coolant_temperature", "engine_temperature"],
+      "properties": {
+        "coolant_temperature": { "type": "number", "minimum": -40, "maximum": 200, "description": "°C" },
+        "engine_temperature": { "type": "number", "minimum": -40, "maximum": 250, "description": "°C" }
+      }
+    },
+    "wheel_speeds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["front_left", "front_right", "rear_left", "rear_right"],
+      "properties": {
+        "front_left": { "type": "number", "minimum": 0, "description": "km/h" },
+        "front_right": { "type": "number", "minimum": 0, "description": "km/h" },
+        "rear_left": { "type": "number", "minimum": 0, "description": "km/h" },
+        "rear_right": { "type": "number", "minimum": 0, "description": "km/h" }
+      }
+    },
+    "vehicle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rpm", "throttle", "brake_pressure", "battery_voltage", "battery_current"],
+      "properties": {
+        "rpm": { "type": "integer", "minimum": 0, "maximum": 20000, "description": "rpm" },
+        "throttle": { "type": "number", "minimum": 0, "maximum": 100, "description": "%" },
+        "brake_pressure": { "type": "number", "minimum": 0, "description": "bar" },
+        "battery_voltage": { "type": "number", "minimum": 0, "description": "V" },
+        "battery_current": { "type": "number", "description": "A, + = charging the battery, - = discharging" }
+      }
+    }
+  }
+}
