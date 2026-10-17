@@ -30,15 +30,10 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
             <span className="text-xs text-slate-400 font-bold flex items-center gap-2">
               <Clock size={15} className="text-emerald-400 animate-pulse" /> CURRENT LAP STATUS
             </span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider bg-red-500/15 text-red-400 border-red-500/30">
-                HOTLAP QUALI
-              </span>
-              <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded font-bold border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                LAP {currentLap} / 53
-              </span>
-            </div>
+            <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded font-bold border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              LAP {currentLap} / 53
+            </span>
           </div>
 
           {/* Running Lap Clock */}
