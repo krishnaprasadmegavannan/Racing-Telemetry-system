@@ -165,7 +165,7 @@ export default function Powertrain({ data }) {
             
             {/* Moving G-Force Traction Dot */}
             <div 
-              className="absolute w-4 h-4 bg-cyan-400 rounded-full shadow-[0_0_15px_#22d3ee] transition-all duration-75 transform -translate-x-1/2 -translate-y-1/2 border-2 border-white"
+              className="absolute w-4 h-4 bg-cyan-400 rounded-full shadow-[0_0_15px_#22d3ee] transition-all duration-200 ease-out transform -translate-x-1/2 -translate-y-1/2 border-2 border-white"
               style={{ left: `${plotX}%`, top: `${plotY}%` }}
             />
           </div>

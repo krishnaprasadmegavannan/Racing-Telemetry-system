@@ -22,8 +22,7 @@ function formatLapMs(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 }
 
-export default function F1TelemetryClient({ data, history = [], stats = {}, lapTiming, telemetryMode }) {
-  const activeMode = lapTiming?.mode || telemetryMode || data?.telemetry_mode || 'HOTLAP';
+export default function F1TelemetryClient({ data, history = [], stats = {}, lapTiming }) {
   const chartData = history.map((pt, idx) => ({
     id: idx,
     time: pt.timestamp ? new Date(pt.timestamp * 1000).toLocaleTimeString().slice(3) : idx,
@@ -127,7 +126,7 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
             </div>
           </div>
           <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-            {data?.tyre_compound || lapTiming?.compound || (activeMode === 'ENDURANCE' ? 'MEDIUM (C3)' : 'SOFT (C4)')}
+            {data?.tyre_compound || lapTiming?.compound || 'SOFT (C4)'}
           </span>
         </div>
 
@@ -164,10 +163,10 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
             </span>
           </div>
           <div className="my-auto text-purple-400 font-bold text-base leading-tight text-center lg:text-left font-mono">
-            {lapTiming?.fastestLapFormatted || (activeMode === 'ENDURANCE' ? '1:24.230' : '1:20.161')}
+            {lapTiming?.fastestLapFormatted || '1:20.161'}
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400">
-            <span className="truncate max-w-[130px]">{lapTiming?.fastestDriver || (activeMode === 'ENDURANCE' ? 'LECLERC (RACE)' : 'LECLERC (POLE)')}</span>
+            <span className="truncate max-w-[130px]">{lapTiming?.fastestDriver || 'LECLERC (POLE)'}</span>
             <span className="text-purple-400 font-bold">LAP {lapTiming?.fastestLapNumber || 1}</span>
           </div>
         </div>
@@ -247,11 +246,11 @@ export default function F1TelemetryClient({ data, history = [], stats = {}, lapT
           <div className="my-auto text-emerald-400 font-bold text-sm leading-tight text-center lg:text-left font-mono">
             {lapTiming?.lastLapFormatted && lapTiming.lastLapFormatted !== '--:--.---'
               ? lapTiming.lastLapFormatted
-              : (activeMode === 'ENDURANCE' ? '1:24.230' : '1:20.161')}
+              : '1:20.161'}
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
             <span>DELTA: <strong className={lapTiming?.lastLapDelta === 'PURPLE' ? 'text-purple-400' : 'text-emerald-400'}>{lapTiming?.lastLapDelta || '±0.000'}</strong></span>
-            <span className="text-amber-500 font-bold">{activeMode === 'ENDURANCE' ? 'STINT 1' : 'QUALI'}</span>
+            <span className="text-amber-500 font-bold">QUALI</span>
           </div>
         </div>
 

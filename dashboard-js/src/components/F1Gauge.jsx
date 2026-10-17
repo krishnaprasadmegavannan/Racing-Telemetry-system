@@ -99,7 +99,7 @@ export default function F1Gauge({
               stroke={scheme.stroke}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
-              className="transition-all duration-150 ease-out"
+              className="transition-all duration-200 ease-out"
               style={{
                 filter: `drop-shadow(0 0 6px ${scheme.bgGlow})`,
               }}

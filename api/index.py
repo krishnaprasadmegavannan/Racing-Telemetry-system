@@ -156,96 +156,139 @@ def get_laps(mode: str = "HOTLAP"):
     }
 
 
+def get_interpolated_frame(idx_float: float):
+    total = len(TELEMETRY_DATA)
+    if total == 0:
+        return None
+    i1 = int(idx_float) % total
+    i2 = (i1 + 1) % total
+    frac = idx_float - int(idx_float)
+    
+    f1 = TELEMETRY_DATA[i1]
+    f2 = TELEMETRY_DATA[i2]
+    
+    # Linear interpolation of continuous physical values
+    speed = round(f1["speed"] + (f2["speed"] - f1["speed"]) * frac, 2)
+    rpm = int(round(f1["rpm"] + (f2["rpm"] - f1["rpm"]) * frac))
+    raw_throttle = round(f1["throttle"] + (f2["throttle"] - f1["throttle"]) * frac, 1)
+    raw_brake = round(f1["brake_pressure"] + (f2["brake_pressure"] - f1["brake_pressure"]) * frac, 1)
+    
+    # Mutual exclusivity guard
+    if raw_brake > 15:
+        throttle = 0.0
+        brake = raw_brake
+    elif raw_throttle > 15:
+        brake = 0.0
+        throttle = raw_throttle
+    else:
+        throttle = raw_throttle
+        brake = raw_brake
+
+    track_x = round(f1["track_x"] + (f2["track_x"] - f1["track_x"]) * frac, 2)
+    track_y = round(f1["track_y"] + (f2["track_y"] - f1["track_y"]) * frac, 2)
+    lat = round(f1["latitude"] + (f2["latitude"] - f1["latitude"]) * frac, 6)
+    lon = round(f1["longitude"] + (f2["longitude"] - f1["longitude"]) * frac, 6)
+
+    long_g = round(f1["long_g"] + (f2["long_g"] - f1["long_g"]) * frac, 2)
+    if brake > 15 and long_g > -0.5:
+        long_g = -round(min(5.2, brake / 21.0), 2)
+    elif throttle > 50 and long_g < 0.2:
+        long_g = round(throttle / 65.0, 2)
+
+    lat_g = round(f1["lat_g"] + (f2["lat_g"] - f1["lat_g"]) * frac, 2)
+    resultant_g = round(f1["resultant_g"] + (f2["resultant_g"] - f1["resultant_g"]) * frac, 2)
+    ax = round(long_g * 9.81, 2)
+    ay = round(f1["ay"] + (f2["ay"] - f1["ay"]) * frac, 2)
+
+    coolant = round(f1["coolant_temp"] + (f2["coolant_temp"] - f1["coolant_temp"]) * frac, 1)
+    engine = round(f1["engine_temp"] + (f2["engine_temp"] - f1["engine_temp"]) * frac, 1)
+    b_fl = round(f1["brake_temp_fl"] + (f2["brake_temp_fl"] - f1["brake_temp_fl"]) * frac, 1)
+    b_fr = round(f1["brake_temp_fr"] + (f2["brake_temp_fr"] - f1["brake_temp_fr"]) * frac, 1)
+    b_rl = round(f1["brake_temp_rl"] + (f2["brake_temp_rl"] - f1["brake_temp_rl"]) * frac, 1)
+    b_rr = round(f1["brake_temp_rr"] + (f2["brake_temp_rr"] - f1["brake_temp_rr"]) * frac, 1)
+
+    dist = round(f1["distance_m"] + (f2["distance_m"] - f1["distance_m"]) * frac, 1)
+    progress = round(f1["progress"] + (f2["progress"] - f1["progress"]) * frac, 4)
+
+    src = f2 if frac >= 0.5 else f1
+    return {
+        "speed": speed,
+        "rpm": rpm,
+        "gear": src["gear"],
+        "throttle": throttle,
+        "brake_pressure": brake,
+        "drs": src["drs"],
+        "track_x": track_x,
+        "track_y": track_y,
+        "latitude": lat,
+        "longitude": lon,
+        "ax": ax,
+        "ay": ay,
+        "long_g": long_g,
+        "lat_g": lat_g,
+        "resultant_g": resultant_g,
+        "cornering_intensity": int(round(f1["cornering_intensity"] + (f2["cornering_intensity"] - f1["cornering_intensity"]) * frac)),
+        "coolant_temp": coolant,
+        "engine_temp": engine,
+        "brake_temp_fl": b_fl,
+        "brake_temp_fr": b_fr,
+        "brake_temp_rl": b_rl,
+        "brake_temp_rr": b_rr,
+        "distance_m": dist,
+        "progress": progress,
+        "corner_name": src["corner_name"],
+        "sector": src["sector"],
+    }
+
+
 @app.websocket("/telemetry/ws")
-async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
+async def telemetry_ws(websocket: WebSocket):
     """
-    WebSocket endpoint streaming authentic FastF1 Monza telemetry at ~10 Hz.
-    Frames repeat continuously in a loop simulating real race pace.
-    Supports ?mode=HOTLAP (qualifying pace) and ?mode=ENDURANCE (race stint pace).
+    WebSocket endpoint streaming authentic FastF1 Monza qualifying telemetry at 20 Hz.
+    Uses sub-frame linear interpolation for fluid rendering on the client.
+    Charles Leclerc 2022 Italian GP Pole Lap (1:20.161) — 12 kg fuel, Soft C4.
     """
     await websocket.accept()
-    mode_clean = mode.upper() if mode else "HOTLAP"
-    is_endurance = (mode_clean == "ENDURANCE")
-    logger.info("WebSocket client connected (Mode: %s): %s", mode_clean, websocket.client)
+    logger.info("WebSocket client connected: %s", websocket.client)
 
     if not TELEMETRY_DATA:
-        # Fallback if dataset failed to load
         logger.error("No telemetry data loaded, closing connection")
         await websocket.close()
         return
 
     seq = 0
     total_frames = len(TELEMETRY_DATA)
-    idx = 0
+    idx_float = 0.0
     lap_number = 1
-    
-    base_fastest_ms = 84230 if is_endurance else 80161
-    base_fastest_time = 84.230 if is_endurance else 80.161
-    fastest_lap_ms = base_fastest_ms
-    fastest_lap_time = base_fastest_time
+
+    fastest_lap_ms = 80161
+    fastest_lap_time = 80.161
     fastest_lap_num = 1
-    last_completed_lap = None
+
+    step_duration = 0.050  # 20 Hz
+    lap_target_sec = 80.161
+    idx_step = total_frames / (lap_target_sec / step_duration)
 
     try:
         while True:
-            frame = TELEMETRY_DATA[idx]
+            frame = get_interpolated_frame(idx_float)
             now_ts = _time.time()
-
-            # Check for lap completion on first frame of a new lap
             lap_just_finished = None
-            if idx == 0 and lap_number > 1:
-                prev_lap_num = lap_number - 1
-                lap_just_finished = get_simulated_lap(prev_lap_num, mode_clean)
-                last_completed_lap = lap_just_finished
-                if lap_just_finished["lap_time_ms"] < fastest_lap_ms:
-                    fastest_lap_ms = lap_just_finished["lap_time_ms"]
-                    fastest_lap_time = lap_just_finished["lap_time"]
-                    fastest_lap_num = prev_lap_num
 
-            # Mode physics adjustments using same FastF1 data:
-            raw_throttle = frame["throttle"]
-            raw_brake = frame["brake_pressure"]
-            if raw_brake > 15:
-                throttle_adj = 0.0
-                brake_adj = raw_brake
-            elif raw_throttle > 15:
-                brake_adj = 0.0
-                throttle_adj = raw_throttle
-            else:
-                throttle_adj = raw_throttle
-                brake_adj = raw_brake
-
-            long_g_adj = frame["long_g"]
-            if brake_adj > 15 and long_g_adj > -0.5:
-                long_g_adj = -round(min(5.2, brake_adj / 21.0), 2)
-            elif throttle_adj > 50 and long_g_adj < 0.2:
-                long_g_adj = round(throttle_adj / 65.0, 2)
-            ax_adj = round(long_g_adj * 9.81, 2)
-
-            if is_endurance:
-                # Endurance Race Stint: 105 kg fuel load, slightly reduced peak VMAX, medium tyres
-                speed_adj = round(frame["speed"] * 0.965, 1)
-                rpm_adj = min(18200, int(round(frame["rpm"] * 0.97)))
-                fuel_kg = max(15.0, round(105.0 - (lap_number - 1) * 1.85 - (frame["progress"] * 1.85), 2))
-                tyre_compound = "MEDIUM (C3)"
-                ers_mode = "RACE BALANCED (HARVEST/DEPLOY)"
-                driver_desc = "Charles Leclerc (Race Stint - High Fuel)"
-                tyre_fl = round(15.0 + lap_number * 1.4, 1)
-                tyre_fr = round(13.0 + lap_number * 1.1, 1)
-                tyre_rl = round(12.5 + lap_number * 1.3, 1)
-                tyre_rr = round(11.8 + lap_number * 1.0, 1)
-            else:
-                # Hotlap Qualifying: 12 kg low fuel, max VMAX (345+ km/h), soft tyres
-                speed_adj = frame["speed"]
-                rpm_adj = frame["rpm"]
-                fuel_kg = max(2.5, round(12.0 - (lap_number - 1) * 2.2 - (frame["progress"] * 2.2), 2))
-                tyre_compound = "SOFT (C4)"
-                ers_mode = "HOTLAP QUALIFYING DEPLOY (100%)"
-                driver_desc = "Charles Leclerc (Q3 Qualifying Pole)"
-                tyre_fl = round(13.0 + lap_number * 2.5, 1)
-                tyre_fr = round(11.0 + lap_number * 2.0, 1)
-                tyre_rl = round(11.0 + lap_number * 2.2, 1)
-                tyre_rr = round(10.0 + lap_number * 1.8, 1)
+            throttle_adj = frame["throttle"]
+            brake_adj    = frame["brake_pressure"]
+            long_g_adj   = frame["long_g"]
+            ax_adj       = frame["ax"]
+            speed_adj    = frame["speed"]
+            rpm_adj      = frame["rpm"]
+            fuel_kg      = max(2.5, round(12.0 - (lap_number - 1) * 2.2 - (frame["progress"] * 2.2), 2))
+            tyre_compound = "SOFT (C4)"
+            ers_mode      = "HOTLAP QUALIFYING DEPLOY (100%)"
+            driver_desc   = "Charles Leclerc (Q3 Qualifying Pole)"
+            tyre_fl = round(13.0 + lap_number * 2.5, 1)
+            tyre_fr = round(11.0 + lap_number * 2.0, 1)
+            tyre_rl = round(11.0 + lap_number * 2.2, 1)
+            tyre_rr = round(10.0 + lap_number * 1.8, 1)
 
             # Alerts generation: strictly ONE distinct active event at a time
             alerts = []
@@ -267,7 +310,7 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
             packet = {
                 "type": "telemetry_update",
                 "timestamp": now_ts,
-                "telemetry_mode": mode_clean,
+                "telemetry_mode": "HOTLAP",
                 "fuel_kg": fuel_kg,
                 "tyre_compound": tyre_compound,
                 "ers_mode": ers_mode,
@@ -278,7 +321,7 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     "fastest_lap_number": fastest_lap_num,
                     "driver": driver_desc,
                     "car": "#16 Ferrari F1-75",
-                    "telemetry_mode": mode_clean,
+                    "telemetry_mode": "HOTLAP",
                 },
                 "lap_completed": lap_just_finished,
                 "raw": {
@@ -298,7 +341,7 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                         "throttle": throttle_adj,
                         "brake_pressure": brake_adj,
                         "battery_voltage": 14.2,
-                        "battery_current": 2.5 if not is_endurance else round(2.0 + (throttle_adj / 100) * 1.5, 2),
+                        "battery_current": 2.5,
                         "drs": frame["drs"],
                     },
                     "imu": {
@@ -333,7 +376,7 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     "metadata": {
                         "timestamp": now_ts,
                         "sequence_number": seq,
-                        "sampling_rate": 10,
+                        "sampling_rate": 20,
                         "status_error_information": "OK",
                         "transmission_information": "FastF1 Telemetry",
                     },
@@ -366,17 +409,25 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                 "alerts": alerts,
             }
 
+            # Advance index for next tick
+            idx_float += idx_step
+            if idx_float >= total_frames:
+                idx_float -= total_frames
+                prev_lap_num = lap_number
+                lap_number += 1
+                lap_just_finished = get_simulated_lap(prev_lap_num, "HOTLAP")
+                packet["lap_completed"] = lap_just_finished
+                if lap_just_finished["lap_time_ms"] < fastest_lap_ms:
+                    fastest_lap_ms = lap_just_finished["lap_time_ms"]
+                    fastest_lap_time = lap_just_finished["lap_time"]
+                    fastest_lap_num = prev_lap_num
+                # Update next lap duration
+                lap_target_sec = lap_just_finished["lap_time"]
+                idx_step = total_frames / (lap_target_sec / step_duration)
+
             await websocket.send_text(json.dumps(packet))
             seq += 1
-            idx += 1
-
-            if idx >= total_frames:
-                idx = 0
-                lap_number += 1
-
-            # Sleep duration: Hotlap ~128ms (80.16s / 623), Endurance ~135ms (84.23s / 623)
-            sleep_duration = 0.135 if is_endurance else 0.128
-            await asyncio.sleep(sleep_duration)
+            await asyncio.sleep(step_duration)
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected cleanly")

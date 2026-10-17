@@ -5,12 +5,11 @@ import MonzaMap from '../components/MonzaMap';
 import AlertsPanel from '../components/AlertsPanel';
 import { Clock, Navigation, Flag, Trophy, Timer, Activity } from 'lucide-react';
 
-export default function Cockpit({ data, alerts, onDismissAlert, lapTiming, telemetryMode }) {
+export default function Cockpit({ data, alerts, onDismissAlert, lapTiming }) {
   const currentLap = lapTiming?.currentLap || data?.tyre_age_lap || 2;
   const activeSector = lapTiming?.activeSector || 1;
   const currentSectorSec = ((lapTiming?.currentSectorMs || 0) / 1000).toFixed(3);
   const lapHistory = lapTiming?.lapHistory || [];
-  const activeMode = lapTiming?.mode || telemetryMode || data?.telemetry_mode || 'HOTLAP';
 
   return (
     <div className="grid grid-cols-12 gap-4 w-full max-w-[1920px] mx-auto font-mono text-slate-200 items-start">
@@ -32,12 +31,8 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming, telem
               <Clock size={15} className="text-emerald-400 animate-pulse" /> CURRENT LAP STATUS
             </span>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                activeMode === 'ENDURANCE'
-                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                  : 'bg-red-500/15 text-red-400 border-red-500/30'
-              }`}>
-                {activeMode === 'ENDURANCE' ? 'ENDURANCE RACE' : 'HOTLAP QUALI'}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider bg-red-500/15 text-red-400 border-red-500/30">
+                HOTLAP QUALI
               </span>
               <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded font-bold border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -188,7 +183,7 @@ export default function Cockpit({ data, alerts, onDismissAlert, lapTiming, telem
                 LAP {lapTiming?.fastestLapNumber || 1}
               </span>
               <span className="text-[10px] text-purple-400">
-                {lapTiming?.fastestDriver || (activeMode === 'ENDURANCE' ? 'Charles Leclerc (Race Stint)' : 'Charles Leclerc (Q3 Pole)')}
+                {lapTiming?.fastestDriver || 'Charles Leclerc (Q3 Pole)'}
               </span>
             </div>
           </div>

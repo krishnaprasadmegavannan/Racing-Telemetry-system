@@ -8,8 +8,7 @@ import Diagnostics from './pages/Diagnostics';
 import { Zap, Gauge, Radio, Cpu, Layers } from 'lucide-react';
 
 export default function App() {
-  const [telemetryMode, setTelemetryMode] = useState('HOTLAP');
-  const { data, history, stats, alerts, isConnected, isStale, setAlerts, lapTiming } = useTelemetry(null, telemetryMode);
+  const { data, history, stats, alerts, isConnected, isStale, setAlerts, lapTiming } = useTelemetry(null);
   const [currentPage, setCurrentPage] = useState('F1_TELEMETRY');
 
   const handleDismissAlert = (id) => {
@@ -48,9 +47,7 @@ export default function App() {
               <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
                 {data?.transmission_information?.includes('ESP32')
                   ? `HARDWARE LINK // ${data.transmission_information} (DUAL ESP32)`
-                  : telemetryMode === 'ENDURANCE'
-                    ? 'ENDURANCE RACE STINT // FASTF1 MONZA (105KG FUEL, MEDIUM C3)'
-                    : 'HOTLAP QUALIFYING // FASTF1 MONZA (12KG FUEL, SOFT C4)'}
+                  : 'HOTLAP QUALIFYING // FASTF1 MONZA (12KG FUEL, SOFT C4)'}
               </span>
             </div>
           </div>
@@ -79,29 +76,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex gap-1.5 bg-[#141824] p-1 rounded-xl border border-[#232736] font-mono text-[11px]">
-            <button 
-              onClick={() => setTelemetryMode('HOTLAP')}
-              className={`px-3 py-1 rounded-lg font-bold ${
-                telemetryMode === 'HOTLAP' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                  : 'text-slate-400 hover:bg-[#1e2334]'
-              }`}
-            >
-              HOTLAP
-            </button>
-            <button 
-              onClick={() => setTelemetryMode('ENDURANCE')}
-              className={`px-3 py-1 rounded-lg font-bold ${
-                telemetryMode === 'ENDURANCE' 
-                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' 
-                  : 'text-slate-400 hover:bg-[#1e2334]'
-              }`}
-            >
-              ENDURANCE
-            </button>
-          </div>
-
           <div className={`w-[210px] flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full border text-[10px] font-mono font-bold transition-all duration-300 ${
             isConnected && !isStale 
               ? data?.transmission_information?.includes('ESP32')
@@ -125,14 +99,13 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-grow p-4 md:p-6 overflow-y-auto">
         {currentPage === 'F1_TELEMETRY' && (
-          <F1TelemetryClient data={data} history={history} stats={stats} lapTiming={lapTiming} telemetryMode={telemetryMode} />
+          <F1TelemetryClient data={data} history={history} stats={stats} lapTiming={lapTiming} />
         )}
 
         {currentPage === 'COCKPIT' && (
-          <Cockpit data={data} alerts={alerts} onDismissAlert={handleDismissAlert} lapTiming={lapTiming} telemetryMode={telemetryMode} />
+          <Cockpit data={data} alerts={alerts} onDismissAlert={handleDismissAlert} lapTiming={lapTiming} />
         )}
         
         {currentPage === 'POWERTRAIN' && (

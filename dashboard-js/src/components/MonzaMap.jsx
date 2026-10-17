@@ -152,7 +152,7 @@ export default function MonzaMap({
           ))}
 
           {/* 7. Live Car Position Beacon */}
-          <g transform={`translate(${carX}, ${carY})`} className="transition-all duration-100 ease-linear">
+          <g transform={`translate(${carX}, ${carY})`} className="transition-all duration-200 ease-linear">
             {/* Outer Pulsing Halo */}
             <circle
               r="14"

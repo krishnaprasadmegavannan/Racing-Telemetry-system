@@ -8,7 +8,7 @@ function roundDec(val, dec = 2) {
   return Number(Number(val).toFixed(dec));
 }
 
-// ── Timing helpers ────────────────────────────────────────────────────────────
+// ── Timing helpers ─────────────────────────────────────────────────────────────
 function msToLapString(ms) {
   if (!ms || ms <= 0) return '--:--.---';
   const totalSec = Math.floor(ms / 1000);
@@ -31,58 +31,39 @@ function msToDeltaString(ms) {
   return `${sign}${(abs / 1000).toFixed(3)}`;
 }
 
-// ── Realistic presets for HOTLAP vs ENDURANCE modes ──────────────────────────
-export const MODE_PRESETS = {
-  HOTLAP: {
-    name: 'HOTLAP',
-    description: 'Q3 Qualifying Push Lap (12 kg fuel, Soft C4 Tyres, Max Power)',
-    baseMs: 80161,
-    formatted: '1:20.161',
-    driver: 'Charles Leclerc (Q3 Qualifying Pole)',
-    compound: 'SOFT (C4)',
-    fuelKg: 12.0,
-    s1Ms: 27412,
-    s2Ms: 37224,
-    s3Ms: 15525,
-    s1Str: '27.412s',
-    s2Str: '37.224s',
-    s3Str: '15.525s',
-    deltas: [0, 324, 112, -215, 489, 720, -80, 250, -290, 510],
-  },
-  ENDURANCE: {
-    name: 'ENDURANCE',
-    description: 'Race Stint Run (105 kg fuel, Medium C3 Tyres, Race Pace)',
-    baseMs: 84230,
-    formatted: '1:24.230',
-    driver: 'Charles Leclerc (Race Stint - High Fuel)',
-    compound: 'MEDIUM (C3)',
-    fuelKg: 105.0,
-    s1Ms: 28640,
-    s2Ms: 39180,
-    s3Ms: 16410,
-    s1Str: '28.640s',
-    s2Str: '39.180s',
-    s3Str: '16.410s',
-    deltas: [0, 485, 250, -340, 390, 920, 80, 660, -490, 1190],
-  },
+// ── Single Monza qualifying preset ────────────────────────────────────────────
+export const PRESET = {
+  baseMs: 80161,
+  formatted: '1:20.161',
+  driver: 'Charles Leclerc (#16 Ferrari F1-75)',
+  compound: 'SOFT (C4)',
+  fuelKg: 12.0,
+  s1Ms: 27412,
+  s2Ms: 37224,
+  s3Ms: 15525,
+  s1Str: '27.412s',
+  s2Str: '37.224s',
+  s3Str: '15.525s',
+  // Realistic lap delta sequence (ms) — repeating
+  deltas: [0, 324, 112, -215, 489, 720, -80, 250, -290, 510],
 };
 
-function getSimulatedLapMs(lapNum, mode = 'HOTLAP') {
-  const preset = MODE_PRESETS[mode.toUpperCase()] || MODE_PRESETS.HOTLAP;
-  const delta = preset.deltas[(lapNum - 1) % preset.deltas.length];
-  return preset.baseMs + delta;
+function getSimulatedLapMs(lapNum) {
+  const delta = PRESET.deltas[(lapNum - 1) % PRESET.deltas.length];
+  return PRESET.baseMs + delta;
 }
 
-// Monza reference sector boundaries (% of lap distance)
-const SECTOR_THRESHOLDS = [0.333, 0.666]; // S1 ends at 33.3%, S2 at 66.6%
+// Sector boundaries at 33.3% and 66.6% of lap
+const SECTOR_THRESHOLDS = [0.333, 0.666];
 
-export function useTelemetry(url, mode = 'HOTLAP') {
-  const activeMode = (mode || 'HOTLAP').toUpperCase();
-  const activePreset = MODE_PRESETS[activeMode] || MODE_PRESETS.HOTLAP;
+// ── Linear interpolation for smoothed display values ──────────────────────────
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
 
+export function useTelemetry(url) {
   const defaultBase = `${window.location.protocol.replace('http', 'ws')}//${window.location.host}/telemetry/ws`;
-  const baseWs = url || defaultBase;
-  const wsUrl = baseWs.includes('?') ? `${baseWs}&mode=${activeMode}` : `${baseWs}?mode=${activeMode}`;
+  const wsUrl = url || defaultBase;
 
   const [data, setData]           = useState(null);
   const [history, setHistory]     = useState([]);
@@ -95,79 +76,70 @@ export function useTelemetry(url, mode = 'HOTLAP') {
     speedTrap: 350.0,
   });
 
-  // ── Lap timing state (exposed to UI) ─────────────────────────────────────────
+  // ── Lap timing state ──────────────────────────────────────────────────────────
   const [lapTiming, setLapTiming] = useState({
     currentLap: 2,
-    currentLapMs: 0,            // ticking live clock
+    currentLapMs: 0,
     currentLapFormatted: '0:00.000',
-    fastestLapMs: activePreset.baseMs,
-    fastestLapFormatted: activePreset.formatted,
+    fastestLapMs: PRESET.baseMs,
+    fastestLapFormatted: PRESET.formatted,
     fastestLapNumber: 1,
-    fastestDriver: activePreset.driver,
+    fastestDriver: PRESET.driver,
     lastLapMs: null,
     lastLapFormatted: '--:--.---',
     lastLapDelta: '',
-    lapHistory: [
-      {
-        lap: 1,
-        ms: activePreset.baseMs,
-        formatted: activePreset.formatted,
-        delta: 'PURPLE',
-        deltaMs: 0,
-        isPurple: true,
-        s1Formatted: activePreset.s1Str,
-        s2Formatted: activePreset.s2Str,
-        s3Formatted: activePreset.s3Str,
-      }
-    ],
-    // Current sector progress
+    lapHistory: [{
+      lap: 1,
+      ms: PRESET.baseMs,
+      formatted: PRESET.formatted,
+      delta: 'PURPLE',
+      deltaMs: 0,
+      isPurple: true,
+      s1Formatted: PRESET.s1Str,
+      s2Formatted: PRESET.s2Str,
+      s3Formatted: PRESET.s3Str,
+    }],
     sector1Ms: null,
     sector2Ms: null,
     sector3Ms: null,
     currentSectorMs: 0,
     activeSector: 1,
-    // Fastest lap sector splits
-    fastestSector1Ms: activePreset.s1Ms,
-    fastestSector2Ms: activePreset.s2Ms,
-    fastestSector3Ms: activePreset.s3Ms,
-    fastestSector1Formatted: activePreset.s1Str,
-    fastestSector2Formatted: activePreset.s2Str,
-    fastestSector3Formatted: activePreset.s3Str,
-    // Mode parameters
-    mode: activeMode,
-    targetLapMs: activePreset.baseMs,
-    targetLapFormatted: activePreset.formatted,
-    compound: activePreset.compound,
-    fuelKg: activePreset.fuelKg,
+    fastestSector1Ms: PRESET.s1Ms,
+    fastestSector2Ms: PRESET.s2Ms,
+    fastestSector3Ms: PRESET.s3Ms,
+    fastestSector1Formatted: PRESET.s1Str,
+    fastestSector2Formatted: PRESET.s2Str,
+    fastestSector3Formatted: PRESET.s3Str,
+    compound: PRESET.compound,
+    fuelKg: PRESET.fuelKg,
   });
 
-  // ── Internal refs (don't trigger render) ────────────────────────────────────
-  const lastValidFrame   = useRef(null);
-  const staleTimer       = useRef(null);
-  const maxSpeedEver     = useRef(350.0);
-  const lapClockTimer    = useRef(null);
+  // ── Internal refs ──────────────────────────────────────────────────────────────
+  const lastValidFrame       = useRef(null);
+  const smoothedFrame        = useRef(null);    // holds lerp-smoothed display values
+  const staleTimer           = useRef(null);
+  const maxSpeedEver         = useRef(350.0);
+  const lapClockTimer        = useRef(null);
   const lastHardwarePacketMs = useRef(0);
   const lastExternalPacketMs = useRef(0);
 
   // Lap state refs
   const lapStartWallMs   = useRef(Date.now());
   const lapNumber        = useRef(2);
-  const fastestLapMs     = useRef(activePreset.baseMs);
+  const fastestLapMs     = useRef(PRESET.baseMs);
   const fastestLapNum    = useRef(1);
   const lastLapMs        = useRef(null);
-  const lapHistory       = useRef([
-    {
-      lap: 1,
-      ms: activePreset.baseMs,
-      formatted: activePreset.formatted,
-      delta: 'PURPLE',
-      deltaMs: 0,
-      isPurple: true,
-      s1Formatted: activePreset.s1Str,
-      s2Formatted: activePreset.s2Str,
-      s3Formatted: activePreset.s3Str,
-    }
-  ]);
+  const lapHistory       = useRef([{
+    lap: 1,
+    ms: PRESET.baseMs,
+    formatted: PRESET.formatted,
+    delta: 'PURPLE',
+    deltaMs: 0,
+    isPurple: true,
+    s1Formatted: PRESET.s1Str,
+    s2Formatted: PRESET.s2Str,
+    s3Formatted: PRESET.s3Str,
+  }]);
 
   // Sector refs
   const sector1EndMs     = useRef(null);
@@ -175,88 +147,22 @@ export function useTelemetry(url, mode = 'HOTLAP') {
   const activeSector     = useRef(1);
 
   // Fastest lap sector bests
-  const fastestS1        = useRef(activePreset.s1Ms);
-  const fastestS2        = useRef(activePreset.s2Ms);
-  const fastestS3        = useRef(activePreset.s3Ms);
+  const fastestS1        = useRef(PRESET.s1Ms);
+  const fastestS2        = useRef(PRESET.s2Ms);
+  const fastestS3        = useRef(PRESET.s3Ms);
 
-  // Last known progress (0.0 – 1.0)
   const lastProgress     = useRef(0);
 
-  // ── Synchronize state when activeMode changes (HOTLAP vs ENDURANCE) ──────────
-  useEffect(() => {
-    const curPreset = MODE_PRESETS[activeMode] || MODE_PRESETS.HOTLAP;
-    fastestLapMs.current = curPreset.baseMs;
-    fastestLapNum.current = 1;
-    fastestS1.current = curPreset.s1Ms;
-    fastestS2.current = curPreset.s2Ms;
-    fastestS3.current = curPreset.s3Ms;
-    lastLapMs.current = null;
-    lapNumber.current = 2;
-    lapStartWallMs.current = Date.now();
-    sector1EndMs.current = null;
-    sector2EndMs.current = null;
-    activeSector.current = 1;
-    lastProgress.current = 0;
-
-    const initialHistory = [
-      {
-        lap: 1,
-        ms: curPreset.baseMs,
-        formatted: curPreset.formatted,
-        delta: 'PURPLE',
-        deltaMs: 0,
-        isPurple: true,
-        s1Formatted: curPreset.s1Str,
-        s2Formatted: curPreset.s2Str,
-        s3Formatted: curPreset.s3Str,
-      }
-    ];
-    lapHistory.current = initialHistory;
-
-    setLapTiming({
-      currentLap: 2,
-      currentLapMs: 0,
-      currentLapFormatted: '0:00.000',
-      fastestLapMs: curPreset.baseMs,
-      fastestLapFormatted: curPreset.formatted,
-      fastestLapNumber: 1,
-      fastestDriver: curPreset.driver,
-      lastLapMs: null,
-      lastLapFormatted: '--:--.---',
-      lastLapDelta: '',
-      lapHistory: initialHistory,
-      sector1Ms: null,
-      sector2Ms: null,
-      sector3Ms: null,
-      currentSectorMs: 0,
-      activeSector: 1,
-      fastestSector1Ms: curPreset.s1Ms,
-      fastestSector2Ms: curPreset.s2Ms,
-      fastestSector3Ms: curPreset.s3Ms,
-      fastestSector1Formatted: curPreset.s1Str,
-      fastestSector2Formatted: curPreset.s2Str,
-      fastestSector3Formatted: curPreset.s3Str,
-      mode: activeMode,
-      targetLapMs: curPreset.baseMs,
-      targetLapFormatted: curPreset.formatted,
-      compound: curPreset.compound,
-      fuelKg: curPreset.fuelKg,
-    });
-  }, [activeMode]);
-
-  // ── Live lap clock (10 Hz tick) ──────────────────────────────────────────────
+  // ── Live lap clock (10 Hz tick) ────────────────────────────────────────────────
   useEffect(() => {
     lapClockTimer.current = setInterval(() => {
       const now = Date.now();
       const lapElapsed = now - lapStartWallMs.current;
-
-      // Sector elapsed since active sector start
       const sectorStart = activeSector.current === 1
         ? lapStartWallMs.current
         : activeSector.current === 2
           ? (sector1EndMs.current ?? lapStartWallMs.current)
           : (sector2EndMs.current ?? lapStartWallMs.current);
-
       const sectorElapsed = Math.max(0, now - sectorStart);
 
       setLapTiming(prev => ({
@@ -274,27 +180,22 @@ export function useTelemetry(url, mode = 'HOTLAP') {
           : null,
       }));
     }, 100);
-
     return () => clearInterval(lapClockTimer.current);
   }, []);
 
-  // ── Lap completion ────────────────────────────────────────────────────────────
+  // ── Lap completion ──────────────────────────────────────────────────────────────
   const completeLap = useCallback((lapTimeMs, lapNum, compData = null) => {
-    const curPreset = MODE_PRESETS[activeMode] || MODE_PRESETS.HOTLAP;
-    const now = Date.now();
-    const effectiveLapMs = lapTimeMs && lapTimeMs > 10000 
-      ? lapTimeMs 
-      : Math.max(curPreset.baseMs - 5000, now - lapStartWallMs.current);
+    const effectiveLapMs = lapTimeMs && lapTimeMs > 10000
+      ? lapTimeMs
+      : Math.max(PRESET.baseMs - 5000, Date.now() - lapStartWallMs.current);
 
     let s1 = compData?.s1 ? Math.round(compData.s1 * 1000) : (sector1EndMs.current ? sector1EndMs.current - lapStartWallMs.current : null);
     let s2 = compData?.s2 ? Math.round(compData.s2 * 1000) : (sector2EndMs.current && sector1EndMs.current ? sector2EndMs.current - sector1EndMs.current : null);
     let s3 = compData?.s3 ? Math.round(compData.s3 * 1000) : (s1 && s2 ? effectiveLapMs - s1 - s2 : null);
 
     if (!s1 || !s2 || !s3 || s1 <= 0 || s2 <= 0 || s3 <= 0) {
-      const s1Ratio = curPreset.s1Ms / curPreset.baseMs;
-      const s2Ratio = curPreset.s2Ms / curPreset.baseMs;
-      s1 = Math.round(effectiveLapMs * s1Ratio);
-      s2 = Math.round(effectiveLapMs * s2Ratio);
+      s1 = Math.round(effectiveLapMs * (PRESET.s1Ms / PRESET.baseMs));
+      s2 = Math.round(effectiveLapMs * (PRESET.s2Ms / PRESET.baseMs));
       s3 = Math.round(effectiveLapMs - s1 - s2);
     }
 
@@ -308,7 +209,6 @@ export function useTelemetry(url, mode = 'HOTLAP') {
     }
 
     const delta = effectiveLapMs - fastestLapMs.current;
-
     const entry = {
       lap: lapNum,
       ms: effectiveLapMs,
@@ -325,7 +225,6 @@ export function useTelemetry(url, mode = 'HOTLAP') {
     lastLapMs.current  = effectiveLapMs;
     lapNumber.current  = lapNum + 1;
 
-    // Reset lap clock for new lap
     lapStartWallMs.current = Date.now();
     sector1EndMs.current   = null;
     sector2EndMs.current   = null;
@@ -348,42 +247,33 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       fastestSector1Formatted: msToSectorString(fastestS1.current),
       fastestSector2Formatted: msToSectorString(fastestS2.current),
       fastestSector3Formatted: msToSectorString(fastestS3.current),
-      sector1Ms: null,
-      sector2Ms: null,
-      sector3Ms: null,
-      activeSector: 1,
     }));
-  }, [activeMode]);
+  }, []);
 
-  // ── Sector detection from telemetry progress ──────────────────────────────────
+  // ── Sector detection ───────────────────────────────────────────────────────────
   const checkSectorTransition = useCallback((progress) => {
     const prev = lastProgress.current;
     lastProgress.current = progress;
-
     const now = Date.now();
 
-    // Sector 1 → 2 boundary
     if (activeSector.current === 1 && progress >= SECTOR_THRESHOLDS[0] && prev < SECTOR_THRESHOLDS[0]) {
       sector1EndMs.current = now;
       activeSector.current = 2;
     }
-    // Sector 2 → 3 boundary
     if (activeSector.current === 2 && progress >= SECTOR_THRESHOLDS[1] && prev < SECTOR_THRESHOLDS[1]) {
       sector2EndMs.current = now;
       activeSector.current = 3;
     }
-    // Sector 3 → Finish Line wrap-around (progress wraps from >0.80 to <0.15)
     if (activeSector.current === 3 && prev > 0.80 && progress < 0.15) {
       const curLap = lapNumber.current;
       const alreadyRecorded = lapHistory.current.some(l => l.lap === curLap);
       if (!alreadyRecorded) {
-        const simMs = getSimulatedLapMs(curLap, activeMode);
-        completeLap(simMs, curLap);
+        completeLap(getSimulatedLapMs(curLap), curLap);
       }
     }
-  }, [completeLap, activeMode]);
+  }, [completeLap]);
 
-  // ── Unified Frame Ingestion ──────────────────────────────────────────────────
+  // ── Frame ingestion with lerp smoothing ──────────────────────────────────────
   const handleIngestedFrame = useCallback((message, isHardware = false) => {
     try {
       if (!(message.type === 'telemetry_update' || message.raw || message.speed)) return;
@@ -401,43 +291,30 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       const transmissionInfo = String(meta.transmission_information || raw.transmission_information || '');
       const isActualHardware = isHardware || transmissionInfo.includes('ESP32') || transmissionInfo.includes('HARDWARE');
 
-      if (isActualHardware) {
-        lastHardwarePacketMs.current = Date.now();
-      }
+      if (isActualHardware) lastHardwarePacketMs.current = Date.now();
 
-      // Core values
+      // ── Raw physics ──────────────────────────────────────────────────────────
       const speed = Math.max(0, Number(gps.speed ?? raw.speed ?? lastValidFrame.current?.speed ?? 0));
       if (speed > maxSpeedEver.current) maxSpeedEver.current = Math.round(speed * 100) / 100;
 
-      // Correlate Throttle & Brake: strictly mutually exclusive
       const rawThrottle = Number(can.throttle ?? raw.throttle ?? 0);
       let throttle = Math.min(100, Math.max(0,
         rawThrottle <= 1.0 && rawThrottle > 0 ? rawThrottle * 100 : rawThrottle));
-
       const rawBrake = Number(can.brake_pressure ?? raw.brake_pressure ?? 0);
       let brake_pressure = Math.min(100, Math.max(0,
         rawBrake <= 1.0 && rawBrake > 0 ? rawBrake * 100 : rawBrake));
 
-      if (brake_pressure > 15) {
-        throttle = 0;
-      } else if (throttle > 15) {
-        brake_pressure = 0;
-      }
+      if (brake_pressure > 15) throttle = 0;
+      else if (throttle > 15) brake_pressure = 0;
 
-      // Correlate Gear with Speed
       const expectedGear = (
-        speed < 75 ? 1 :
-        speed < 115 ? 2 :
-        speed < 155 ? 3 :
-        speed < 195 ? 4 :
-        speed < 240 ? 5 :
-        speed < 285 ? 6 :
+        speed < 75 ? 1 : speed < 115 ? 2 : speed < 155 ? 3 :
+        speed < 195 ? 4 : speed < 240 ? 5 : speed < 285 ? 6 :
         speed < 320 ? 7 : 8
       );
       const rawGear = Number(can.gear ?? raw.gear ?? 0);
       const gear = (rawGear > 0 && Math.abs(rawGear - expectedGear) <= 1) ? rawGear : expectedGear;
 
-      // Correlate RPM with Gear and Speed (8,500 - 12,500 rpm for F1 turbo hybrid)
       let rawRpm = Number(can.rpm ?? raw.rpm ?? 0);
       let rpm = rawRpm;
       if (speed > 80 && (rawRpm < 7500 || rawRpm > 14000)) {
@@ -446,11 +323,9 @@ export function useTelemetry(url, mode = 'HOTLAP') {
         rpm = Math.max(4500, Math.round(speed * 60));
       }
 
-      // Correlate G-forces with braking/acceleration and cornering
       let ax = Number(processed.longitudinal_acceleration ?? imu.ax ?? 0);
       let ay = Number(processed.lateral_acceleration      ?? imu.ay ?? 0);
       let az = Number(processed.vertical_acceleration     ?? imu.az ?? 9.81);
-
       let long_g = Number(processed.long_g ?? (ax / 9.81));
       if (brake_pressure > 15 && long_g > -0.5) {
         long_g = -Number(Math.min(5.2, brake_pressure / 21.0).toFixed(2));
@@ -459,7 +334,6 @@ export function useTelemetry(url, mode = 'HOTLAP') {
         long_g = Number((throttle / 65.0).toFixed(2));
         ax = Number((long_g * 9.81).toFixed(2));
       }
-
       let lat_g = Number(processed.lat_g ?? (ay / 9.81));
       const resultantG = Number((Math.sqrt(ax * ax + ay * ay + az * az) / 9.81).toFixed(2));
       const corneringIntensity = Math.min(100, Math.round((Math.abs(lat_g) / 4.5) * 100));
@@ -468,16 +342,12 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       const battery_current = Number(can.battery_current ?? lastValidFrame.current?.battery_current ?? (2.5 + (throttle / 100) * 1.5));
       const powerKW = Number(((battery_voltage * battery_current) / 1000).toFixed(2));
 
-      // Correlate wheel speeds with speed and slip
       const wheel_fl = Number(wheels.front_left  ?? speed);
       const wheel_fr = Number(wheels.front_right ?? speed);
       const wheel_rl = Number(wheels.rear_left   ?? (throttle > 85 ? speed + 1.2 : speed));
       const wheel_rr = Number(wheels.rear_right  ?? (throttle > 85 ? speed + 1.2 : speed));
-      const drivenWheels  = Math.max(wheel_rl, wheel_rr);
-      const rollingWheels = Math.min(wheel_fl, wheel_fr);
-      const wheelSlipDelta = Number(Math.max(0, drivenWheels - rollingWheels).toFixed(1));
+      const wheelSlipDelta = Number(Math.max(0, Math.max(wheel_rl, wheel_rr) - Math.min(wheel_fl, wheel_fr)).toFixed(1));
 
-      // Correlate brake temps
       const brake_temp_fl = Number(temp.brake_temp_fl ?? (650 + (brake_pressure / 100) * 350));
       const brake_temp_fr = Number(temp.brake_temp_fr ?? (648 + (brake_pressure / 100) * 350));
       const brake_temp_rl = Number(temp.brake_temp_rl ?? (610 + (brake_pressure / 100) * 280));
@@ -488,43 +358,52 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       const tyre_wear_rl = Number(tyre.rl ?? 11.0);
       const tyre_wear_rr = Number(tyre.rr ?? 10.0);
 
-      const curPreset = MODE_PRESETS[activeMode] || MODE_PRESETS.HOTLAP;
       const rawProgress = Number(raw.progress ?? 0);
-      const progress = rawProgress > 0 
-        ? rawProgress 
-        : (((Date.now() - lapStartWallMs.current) % curPreset.baseMs) / curPreset.baseMs);
+      const progress = rawProgress > 0 ? rawProgress
+        : (((Date.now() - lapStartWallMs.current) % PRESET.baseMs) / PRESET.baseMs);
 
-      // Sector boundary detection
       checkSectorTransition(progress);
 
-      // Lap completion handling
+      // Lap completion from backend payload
       if (message.lap_completed) {
         const comp = message.lap_completed;
         const alreadyRecorded = lapHistory.current.some(l => l.lap === comp.lap_number);
-        if (!alreadyRecorded) {
-          completeLap(comp.lap_time_ms, comp.lap_number, comp);
-        }
-      } else if (message.lap && message.lap.lap_completed) {
+        if (!alreadyRecorded) completeLap(comp.lap_time_ms, comp.lap_number, comp);
+      } else if (message.lap?.lap_completed) {
         const comp = message.lap.lap_completed;
         const alreadyRecorded = lapHistory.current.some(l => l.lap === comp.lap_number);
-        if (!alreadyRecorded) {
-          completeLap(comp.lap_time_ms, comp.lap_number, comp);
-        }
-      } else if (message.lap && message.lap.lap_time && message.lap.lap_number && message.lap.lap_number >= lapNumber.current) {
+        if (!alreadyRecorded) completeLap(comp.lap_time_ms, comp.lap_number, comp);
+      } else if (message.lap?.lap_time && message.lap?.lap_number && message.lap.lap_number >= lapNumber.current) {
         const backendLapMs  = Math.round(message.lap.lap_time * 1000);
         const backendLapNum = message.lap.lap_number;
         const alreadyRecorded = lapHistory.current.some(l => l.lap === backendLapNum);
-        if (!alreadyRecorded && backendLapMs > 5000) {
-          completeLap(backendLapMs, backendLapNum);
-        }
+        if (!alreadyRecorded && backendLapMs > 5000) completeLap(backendLapMs, backendLapNum);
       }
 
-      // Mode-specific channels
-      const fuel_kg = Number(raw.fuel_kg ?? message.fuel_kg ?? (activeMode === 'ENDURANCE' ? 104.5 : 11.8));
-      const tyre_compound = String(raw.tyre_compound ?? message.tyre_compound ?? curPreset.compound);
-      const ers_mode = String(raw.ers_mode ?? message.ers_mode ?? (activeMode === 'ENDURANCE' ? 'RACE BALANCED' : 'HOTLAP QUALIFYING'));
+      const fuel_kg = Number(raw.fuel_kg ?? message.fuel_kg ?? 11.8);
+      const tyre_compound = String(raw.tyre_compound ?? message.tyre_compound ?? PRESET.compound);
+      const ers_mode = String(raw.ers_mode ?? message.ers_mode ?? 'HOTLAP QUALIFYING DEPLOY (100%)');
 
-      // Frame construction
+      // ── Lerp smoothing — blend toward new frame (α=0.35 for fast values, 0.15 for slow) ──
+      const prev = smoothedFrame.current;
+      const α_fast = 0.40;  // speed, rpm, throttle, brake (reactive)
+      const α_slow = 0.20;  // position, temps, g-forces (smoother)
+
+      const smoothSpeed    = prev ? lerp(prev.speed,          speed,          α_fast) : speed;
+      const smoothRpm      = prev ? lerp(prev.rpm,            rpm,            α_fast) : rpm;
+      const smoothThrottle = prev ? lerp(prev.throttle,       throttle,       α_fast) : throttle;
+      const smoothBrake    = prev ? lerp(prev.brake_pressure, brake_pressure, α_fast) : brake_pressure;
+      const smoothLongG    = prev ? lerp(prev.long_g,         long_g,         α_slow) : long_g;
+      const smoothLatG     = prev ? lerp(prev.lat_g,          lat_g,          α_slow) : lat_g;
+      const smoothAx       = smoothLongG * 9.81;
+      const smoothAy       = prev ? lerp(prev.ay,             ay,             α_slow) : ay;
+      const smoothTrkX     = prev ? lerp(prev.track_x,        Number(raw.track_x ?? gps.track_x ?? 741.6), α_slow) : Number(raw.track_x ?? gps.track_x ?? 741.6);
+      const smoothTrkY     = prev ? lerp(prev.track_y,        Number(raw.track_y ?? gps.track_y ?? 473.2), α_slow) : Number(raw.track_y ?? gps.track_y ?? 473.2);
+      const smoothBtFL     = prev ? lerp(prev.brake_temp_fl,  brake_temp_fl,  α_slow) : brake_temp_fl;
+      const smoothBtFR     = prev ? lerp(prev.brake_temp_fr,  brake_temp_fr,  α_slow) : brake_temp_fr;
+      const smoothBtRL     = prev ? lerp(prev.brake_temp_rl,  brake_temp_rl,  α_slow) : brake_temp_rl;
+      const smoothBtRR     = prev ? lerp(prev.brake_temp_rr,  brake_temp_rr,  α_slow) : brake_temp_rr;
+
       const newPoint = {
         latitude:  Number(gps.latitude  ?? 45.618),
         longitude: Number(gps.longitude ?? 9.281),
@@ -532,61 +411,78 @@ export function useTelemetry(url, mode = 'HOTLAP') {
         satellite_count: Number(gps.satellite_count ?? 14),
         fix_status: String(gps.fix_status ?? '3D_FIX'),
 
-        speed, rpm, gear, throttle, brake_pressure,
-        ax, ay, az, resultantG, corneringIntensity,
+        speed:          roundDec(smoothSpeed, 1),
+        rpm:            Math.round(smoothRpm),
+        gear,
+        throttle:       roundDec(smoothThrottle, 1),
+        brake_pressure: roundDec(smoothBrake, 1),
+
+        ax: roundDec(smoothAx, 2),
+        ay: roundDec(smoothAy, 2),
+        az: Number(imu.az ?? 9.81),
         gx: Number(imu.gx ?? 0),
         gy: Number(imu.gy ?? 0),
         gz: Number(imu.gz ?? 0),
+        resultantG,
+        corneringIntensity,
 
-        wheel_fl, wheel_fr, wheel_rl, wheel_rr, wheelSlipDelta,
+        long_g:   roundDec(smoothLongG, 2),
+        lat_g:    roundDec(smoothLatG, 2),
+
+        wheel_fl: roundDec(smoothSpeed, 1),
+        wheel_fr: roundDec(smoothSpeed, 1),
+        wheel_rl: roundDec(throttle > 85 ? smoothSpeed + 1.2 : smoothSpeed, 1),
+        wheel_rr: roundDec(throttle > 85 ? smoothSpeed + 1.2 : smoothSpeed, 1),
+        wheelSlipDelta,
 
         coolant_temp:  Number(temp.coolant_temperature ?? 92.5),
         engine_temp:   Number(temp.engine_temperature  ?? 105.0),
-        brake_temp_fl, brake_temp_fr, brake_temp_rl, brake_temp_rr,
+        brake_temp_fl: roundDec(smoothBtFL, 1),
+        brake_temp_fr: roundDec(smoothBtFR, 1),
+        brake_temp_rl: roundDec(smoothBtRL, 1),
+        brake_temp_rr: roundDec(smoothBtRR, 1),
 
         tyre_wear_fl, tyre_wear_fr, tyre_wear_rl, tyre_wear_rr,
-        tyre_age_lap:   Number(tyre.age_lap ?? lapNumber.current),
+        tyre_age_lap: Number(tyre.age_lap ?? lapNumber.current),
         engine_damage: 10.0,
 
         battery_voltage, battery_current, powerKW,
         speedTrap: maxSpeedEver.current,
 
-        track_x:     Number(raw.track_x ?? gps.track_x ?? 741.6),
-        track_y:     Number(raw.track_y ?? gps.track_y ?? 473.2),
+        track_x:     roundDec(smoothTrkX, 2),
+        track_y:     roundDec(smoothTrkY, 2),
         progress,
         corner_name: String(raw.corner_name || processed.corner_name || 'Main Straight'),
         sector:      Number(raw.sector || activeSector.current || 1),
         distance:    Number(raw.distance || 0),
         drs:         Number(can.drs ?? raw.drs ?? 0),
-        long_g:      Number(processed.long_g ?? (ax / 9.81)),
-        lat_g:       Number(processed.lat_g  ?? (ay / 9.81)),
 
         fuel_kg,
         tyre_compound,
         ers_mode,
-        telemetry_mode: activeMode,
 
-        timestamp:            Number(meta.timestamp        ?? Date.now() / 1000),
-        sequence_number:      Number(meta.sequence_number  ?? 0),
-        sampling_rate:        Number(meta.sampling_rate    ?? 50),
-        status_error_information:  String(meta.status_error_information  ?? 'OK'),
-        transmission_information:  isActualHardware
+        timestamp:           Number(meta.timestamp ?? Date.now() / 1000),
+        sequence_number:     Number(meta.sequence_number ?? 0),
+        sampling_rate:       Number(meta.sampling_rate ?? 20),
+        status_error_information: String(meta.status_error_information ?? 'OK'),
+        transmission_information: isActualHardware
           ? (transmissionInfo.includes('ESP32') ? transmissionInfo : 'ESP32_SERIAL_CAN')
           : 'FastF1 Telemetry (Monza)',
       };
 
+      smoothedFrame.current  = newPoint;
       lastValidFrame.current = newPoint;
       setData(newPoint);
       setIsConnected(true);
       setIsStale(false);
 
       if (staleTimer.current) clearTimeout(staleTimer.current);
-      staleTimer.current = setTimeout(() => setIsStale(true), 2500);
+      staleTimer.current = setTimeout(() => setIsStale(true), 3000);
 
-      // Rolling history
-      setHistory((prev) => {
+      // Rolling history (throttle only every 2nd frame to keep chart smooth but not huge)
+      setHistory(prev => {
         const next = [...prev, newPoint];
-        const trimmed = next.length > 150 ? next.slice(-150) : next;
+        const trimmed = next.length > 300 ? next.slice(-300) : next;
         if (trimmed.length > 0) {
           let sMin = Infinity, sMax = -Infinity, sSum = 0;
           let rMin = Infinity, rMax = -Infinity, rSum = 0;
@@ -627,192 +523,131 @@ export function useTelemetry(url, mode = 'HOTLAP') {
     } catch (e) {
       console.error('Frame ingestion error:', e);
     }
-  }, [activeMode, checkSectorTransition, completeLap]);
+  }, [checkSectorTransition, completeLap]);
 
-  // ── Default / Fallback FastF1 Playback Loop ──────────────────────────────────
+  // ── Fallback FastF1 playback (20 Hz with sub-frame lerp) ─────────────────────
   useEffect(() => {
     if (!FALLBACK_TELEMETRY.length) return;
-
-    let simIdx = 0;
+    let idxFloat = 0.0;
     let simLapNumber = 1;
-    const intervalMs = activeMode === 'ENDURANCE' ? 135 : 125;
+    const N = FALLBACK_TELEMETRY.length;
+    const lapTargetSec = PRESET.baseMs / 1000;
+    const intervalMs = 50; // 20 Hz
+    const idxStep = N / ((lapTargetSec * 1000) / intervalMs);
 
     const simTimer = setInterval(() => {
-      // If ANY external WebSocket packets arrived within the last 2.0s, yield to external stream
-      if (Date.now() - lastExternalPacketMs.current < 2000) {
-        return;
-      }
+      // Yield to WebSocket when it is active
+      if (Date.now() - lastExternalPacketMs.current < 2000) return;
 
-      const frame = FALLBACK_TELEMETRY[simIdx];
-      if (!frame) return;
+      const i1 = Math.floor(idxFloat) % N;
+      const i2 = (i1 + 1) % N;
+      const frac = idxFloat - Math.floor(idxFloat);
+      const f1 = FALLBACK_TELEMETRY[i1];
+      const f2 = FALLBACK_TELEMETRY[i2];
+      if (!f1 || !f2) return;
 
-      const isEndurance = (activeMode === 'ENDURANCE');
+      // Interpolate between frames
+      const lerpNum = (a, b) => a + (b - a) * frac;
+      const speed_adj   = roundDec(lerpNum(f1.speed, f2.speed), 1);
+      const rpm_adj     = Math.round(lerpNum(f1.rpm, f2.rpm));
+      const raw_thr     = roundDec(lerpNum(f1.throttle, f2.throttle), 1);
+      const raw_brk     = roundDec(lerpNum(f1.brake_pressure, f2.brake_pressure), 1);
+      const throttle    = raw_brk > 15 ? 0.0 : raw_thr;
+      const brake       = raw_thr > 15 ? 0.0 : raw_brk;
+      const track_x     = roundDec(lerpNum(f1.track_x, f2.track_x), 2);
+      const track_y     = roundDec(lerpNum(f1.track_y, f2.track_y), 2);
+      const lat         = roundDec(lerpNum(f1.latitude, f2.latitude), 6);
+      const lon         = roundDec(lerpNum(f1.longitude, f2.longitude), 6);
+      const src         = frac >= 0.5 ? f2 : f1;
+      const fuel_kg     = Math.max(2.5, roundDec(12.0 - (simLapNumber - 1) * 2.2 - (src.progress * 2.2), 2));
 
-      // Mode physics scaling
-      let speed_adj, rpm_adj, fuel_kg, tyre_compound, ers_mode, tyre_fl, tyre_fr, tyre_rl, tyre_rr;
-
-      if (isEndurance) {
-        speed_adj = roundDec(frame.speed * 0.965, 1);
-        rpm_adj = Math.min(18200, Math.round(frame.rpm * 0.97));
-        fuel_kg = Math.max(15.0, roundDec(105.0 - (simLapNumber - 1) * 1.85 - (frame.progress * 1.85), 2));
-        tyre_compound = 'MEDIUM (C3)';
-        ers_mode = 'RACE BALANCED (HARVEST/DEPLOY)';
-        tyre_fl = roundDec(15.0 + simLapNumber * 1.4, 1);
-        tyre_fr = roundDec(13.0 + simLapNumber * 1.1, 1);
-        tyre_rl = roundDec(12.5 + simLapNumber * 1.3, 1);
-        tyre_rr = roundDec(11.8 + simLapNumber * 1.0, 1);
-      } else {
-        speed_adj = frame.speed;
-        rpm_adj = frame.rpm;
-        fuel_kg = Math.max(2.5, roundDec(12.0 - (simLapNumber - 1) * 2.2 - (frame.progress * 2.2), 2));
-        tyre_compound = 'SOFT (C4)';
-        ers_mode = 'HOTLAP QUALIFYING DEPLOY (100%)';
-        tyre_fl = roundDec(13.0 + simLapNumber * 2.5, 1);
-        tyre_fr = roundDec(11.0 + simLapNumber * 2.0, 1);
-        tyre_rl = roundDec(11.0 + simLapNumber * 2.2, 1);
-        tyre_rr = roundDec(10.0 + simLapNumber * 1.8, 1);
-      }
-
-      // Check lap completion on wrap-around
+      // Lap wrap-around lap completion
       let lapCompleted = null;
-      if (simIdx === 0 && simLapNumber > 1) {
+      if (i1 === 0 && idxFloat < idxStep && simLapNumber > 1) {
         const prevLap = simLapNumber - 1;
-        const curPreset = MODE_PRESETS[activeMode] || MODE_PRESETS.HOTLAP;
-        const delta = curPreset.deltas[(prevLap - 1) % curPreset.deltas.length];
-        const lapTimeMs = curPreset.baseMs + delta;
+        const delta = PRESET.deltas[(prevLap - 1) % PRESET.deltas.length];
+        const lapTimeMs = PRESET.baseMs + delta;
         lapCompleted = {
           lap_number: prevLap,
           lap_time_ms: lapTimeMs,
           lap_time: lapTimeMs / 1000,
-          s1: Math.round(curPreset.s1Ms + (delta * 0.35)) / 1000,
-          s2: Math.round(curPreset.s2Ms + (delta * 0.45)) / 1000,
-          s3: Math.round(lapTimeMs - (curPreset.s1Ms + (delta * 0.35)) - (curPreset.s2Ms + (delta * 0.45))) / 1000,
+          s1: Math.round(PRESET.s1Ms + (delta * 0.35)) / 1000,
+          s2: Math.round(PRESET.s2Ms + (delta * 0.45)) / 1000,
+          s3: Math.round(lapTimeMs - (PRESET.s1Ms + (delta * 0.35)) - (PRESET.s2Ms + (delta * 0.45))) / 1000,
         };
       }
 
       const alerts = [];
-      if (frame.brake_pressure > 80) {
-        alerts.push({
-          id: 'heavy_braking_zone',
-          severity: 'warning',
-          alert_type: 'HEAVY BRAKING ZONE',
-          message: `Threshold decel ${(frame.long_g || 0).toFixed(1)}G into ${frame.corner_name || 'Turn'}`,
-        });
-      } else if (speed_adj > 330 && frame.drs > 0) {
-        alerts.push({
-          id: 'speed_trap_active',
-          severity: 'info',
-          alert_type: 'DRS HIGH SPEED TRAP',
-          message: `VMAX ${speed_adj.toFixed(0)} km/h - DRS Active on Rettifilo`,
-        });
+      if (brake > 80) {
+        alerts.push({ id: 'heavy_braking_zone', severity: 'warning', alert_type: 'HEAVY BRAKING ZONE',
+          message: `Threshold decel ${(src.long_g || 0).toFixed(1)}G into ${src.corner_name || 'Turn'}` });
+      } else if (speed_adj > 330 && src.drs > 0) {
+        alerts.push({ id: 'speed_trap_active', severity: 'info', alert_type: 'DRS HIGH SPEED TRAP',
+          message: `VMAX ${speed_adj.toFixed(0)} km/h - DRS Active on Rettifilo` });
       }
 
       const syntheticPacket = {
         type: 'telemetry_update',
         timestamp: Date.now() / 1000,
-        telemetry_mode: activeMode,
         fuel_kg,
-        tyre_compound,
-        ers_mode,
+        tyre_compound: PRESET.compound,
+        ers_mode: 'HOTLAP QUALIFYING DEPLOY (100%)',
         lap_completed: lapCompleted,
         raw: {
-          gps: {
-            latitude: frame.latitude,
-            longitude: frame.longitude,
-            altitude: 183.0,
-            speed: speed_adj,
-            satellite_count: 14,
-            fix_status: '3D_FIX',
-            track_x: frame.track_x,
-            track_y: frame.track_y,
-          },
-          vehicle_can: {
-            rpm: rpm_adj,
-            gear: frame.gear,
-            throttle: frame.throttle,
-            brake_pressure: frame.brake_pressure,
-            battery_voltage: 14.2,
-            battery_current: isEndurance ? roundDec(2.0 + (frame.throttle / 100) * 1.5, 2) : 2.5,
-            drs: frame.drs,
-          },
-          imu: {
-            ax: frame.ax,
-            ay: frame.ay,
-            az: 9.81,
-            gx: 0.0,
-            gy: 0.0,
-            gz: roundDec((frame.lat_g || 0) * 0.12, 3),
-          },
-          temperature: {
-            coolant_temperature: frame.coolant_temp,
-            engine_temperature: frame.engine_temp,
-            brake_temp_fl: frame.brake_temp_fl,
-            brake_temp_fr: frame.brake_temp_fr,
-            brake_temp_rl: frame.brake_temp_rl,
-            brake_temp_rr: frame.brake_temp_rr,
-          },
-          wheel_speeds: {
-            front_left: speed_adj,
-            front_right: speed_adj,
-            rear_left: speed_adj,
-            rear_right: speed_adj,
-          },
-          tyre_wear: {
-            fl: tyre_fl,
-            fr: tyre_fr,
-            rl: tyre_rl,
-            rr: tyre_rr,
-            age_lap: simLapNumber,
-          },
-          metadata: {
-            timestamp: Date.now() / 1000,
-            sequence_number: simIdx,
-            sampling_rate: isEndurance ? 8 : 10,
-            status_error_information: 'OK',
-            transmission_information: 'FastF1 Telemetry (Monza)',
-          },
-          track_x: frame.track_x,
-          track_y: frame.track_y,
-          speed: speed_adj,
-          rpm: rpm_adj,
-          gear: frame.gear,
-          throttle: frame.throttle,
-          brake_pressure: frame.brake_pressure,
-          corner_name: frame.corner_name,
-          sector: frame.sector,
-          distance: frame.distance_m,
-          progress: frame.progress,
-          fuel_kg,
-          tyre_compound,
-          ers_mode,
+          gps: { latitude: lat, longitude: lon, altitude: 183.0, speed: speed_adj,
+            satellite_count: 14, fix_status: '3D_FIX', track_x, track_y },
+          vehicle_can: { rpm: rpm_adj, gear: src.gear, throttle, brake_pressure: brake,
+            battery_voltage: 14.2, battery_current: 2.5, drs: src.drs },
+          imu: { ax: roundDec(lerpNum(f1.ax, f2.ax), 2), ay: roundDec(lerpNum(f1.ay, f2.ay), 2),
+            az: 9.81, gx: 0.0, gy: 0.0, gz: roundDec((src.lat_g || 0) * 0.12, 3) },
+          temperature: { coolant_temperature: roundDec(lerpNum(f1.coolant_temp, f2.coolant_temp), 1),
+            engine_temperature: roundDec(lerpNum(f1.engine_temp, f2.engine_temp), 1),
+            brake_temp_fl: roundDec(lerpNum(f1.brake_temp_fl, f2.brake_temp_fl), 1),
+            brake_temp_fr: roundDec(lerpNum(f1.brake_temp_fr, f2.brake_temp_fr), 1),
+            brake_temp_rl: roundDec(lerpNum(f1.brake_temp_rl, f2.brake_temp_rl), 1),
+            brake_temp_rr: roundDec(lerpNum(f1.brake_temp_rr, f2.brake_temp_rr), 1) },
+          wheel_speeds: { front_left: speed_adj, front_right: speed_adj,
+            rear_left: speed_adj, rear_right: speed_adj },
+          tyre_wear: { fl: roundDec(13.0 + simLapNumber * 2.5, 1),
+            fr: roundDec(11.0 + simLapNumber * 2.0, 1),
+            rl: roundDec(11.0 + simLapNumber * 2.2, 1),
+            rr: roundDec(10.0 + simLapNumber * 1.8, 1), age_lap: simLapNumber },
+          metadata: { timestamp: Date.now() / 1000, sequence_number: Math.round(idxFloat),
+            sampling_rate: 20, status_error_information: 'OK',
+            transmission_information: 'FastF1 Telemetry (Monza)' },
+          track_x, track_y, speed: speed_adj, rpm: rpm_adj, gear: src.gear,
+          throttle, brake_pressure: brake, corner_name: src.corner_name,
+          sector: src.sector, distance: roundDec(lerpNum(f1.distance_m, f2.distance_m), 1),
+          progress: roundDec(lerpNum(f1.progress, f2.progress), 4),
+          fuel_kg, tyre_compound: PRESET.compound, ers_mode: 'HOTLAP QUALIFYING DEPLOY (100%)',
         },
         processed: {
-          longitudinal_acceleration: frame.ax,
-          lateral_acceleration: frame.ay,
+          longitudinal_acceleration: roundDec(lerpNum(f1.ax, f2.ax), 2),
+          lateral_acceleration: roundDec(lerpNum(f1.ay, f2.ay), 2),
           vertical_acceleration: 9.81,
-          long_g: frame.long_g,
-          lat_g: frame.lat_g,
-          resultant_g: frame.resultant_g,
-          cornering_intensity: frame.cornering_intensity,
-          braking_intensity: frame.brake_pressure,
-          corner_name: frame.corner_name,
+          long_g: roundDec(lerpNum(f1.long_g, f2.long_g), 2),
+          lat_g: roundDec(lerpNum(f1.lat_g, f2.lat_g), 2),
+          resultant_g: roundDec(lerpNum(f1.resultant_g, f2.resultant_g), 2),
+          cornering_intensity: Math.round(lerpNum(f1.cornering_intensity, f2.cornering_intensity)),
+          braking_intensity: brake,
+          corner_name: src.corner_name,
         },
         alerts,
       };
 
       handleIngestedFrame(syntheticPacket, false);
 
-      simIdx += 1;
-      if (simIdx >= FALLBACK_TELEMETRY.length) {
-        simIdx = 0;
+      idxFloat += idxStep;
+      if (idxFloat >= N) {
+        idxFloat -= N;
         simLapNumber += 1;
       }
     }, intervalMs);
 
     return () => clearInterval(simTimer);
-  }, [activeMode, completeLap, handleIngestedFrame]);
+  }, [handleIngestedFrame]);
 
-  // ── WebSocket ────────────────────────────────────────────────────────────────
+  // ── WebSocket ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     let ws = null;
     let reconnectTimeout = null;
@@ -828,7 +663,6 @@ export function useTelemetry(url, mode = 'HOTLAP') {
 
       ws.onopen = () => { setIsConnected(true); setIsStale(false); };
       ws.onclose = () => {
-        // If WebSocket closes, do not mark as stale if local stream is active
         if (Date.now() - lastHardwarePacketMs.current >= 2500) {
           setIsConnected(true);
           setIsStale(false);

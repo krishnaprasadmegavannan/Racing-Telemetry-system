@@ -74,7 +74,7 @@ export default function SuperbikeCluster({ rpm = 0, speed = 0, throttle = 0, bra
               stroke={isRedline ? "#ef4444" : clampedRPM > 10500 ? "#f59e0b" : "#22c55e"}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
-              className="transition-all duration-100"
+              className="transition-all duration-200 ease-out"
               style={{
                 filter: isRedline 
                   ? 'drop-shadow(0 0 6px rgba(239, 68, 68, 0.7))'
@@ -135,7 +135,7 @@ export default function SuperbikeCluster({ rpm = 0, speed = 0, throttle = 0, bra
             <span className="text-cyan-400 font-bold">{Math.round(throttle)}%</span>
           </div>
           <div className="w-full bg-[#10131b] h-1.5 rounded overflow-hidden border border-[#232736]">
-            <div className="bg-cyan-500 h-full transition-all duration-100" style={{ width: `${Math.min(100, Math.max(0, throttle))}%` }} />
+            <div className="bg-cyan-500 h-full transition-all duration-200 ease-out" style={{ width: `${Math.min(100, Math.max(0, throttle))}%` }} />
           </div>
         </div>
 
@@ -145,7 +145,7 @@ export default function SuperbikeCluster({ rpm = 0, speed = 0, throttle = 0, bra
             <span className="text-red-400 font-bold">{Math.round(brake)}%</span>
           </div>
           <div className="w-full bg-[#10131b] h-1.5 rounded overflow-hidden border border-[#232736]">
-            <div className="bg-red-500 h-full transition-all duration-100" style={{ width: `${Math.min(100, Math.max(0, brake))}%` }} />
+            <div className="bg-red-500 h-full transition-all duration-200 ease-out" style={{ width: `${Math.min(100, Math.max(0, brake))}%` }} />
           </div>
         </div>
       </div>
