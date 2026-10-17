@@ -147,6 +147,7 @@ export function useTelemetry(url, mode = 'HOTLAP') {
   const maxSpeedEver     = useRef(350.0);
   const lapClockTimer    = useRef(null);
   const lastHardwarePacketMs = useRef(0);
+  const lastExternalPacketMs = useRef(0);
 
   // Lap state refs
   const lapStartWallMs   = useRef(Date.now());
@@ -405,45 +406,82 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       }
 
       // Core values
-      const speed = Number(gps.speed ?? raw.speed ?? lastValidFrame.current?.speed ?? 0);
+      const speed = Math.max(0, Number(gps.speed ?? raw.speed ?? lastValidFrame.current?.speed ?? 0));
       if (speed > maxSpeedEver.current) maxSpeedEver.current = Math.round(speed * 100) / 100;
 
-      const rpm   = Number(can.rpm  ?? raw.rpm  ?? lastValidFrame.current?.rpm  ?? 0);
-      const gear  = Number(can.gear ?? raw.gear ?? (
-        speed < 10 ? 1 : speed < 90 ? 2 : speed < 130 ? 3 :
-        speed < 180 ? 4 : speed < 240 ? 5 : speed < 300 ? 6 : 7
-      ));
-
+      // Correlate Throttle & Brake: strictly mutually exclusive
       const rawThrottle = Number(can.throttle ?? raw.throttle ?? 0);
-      const throttle = Math.min(100, Math.max(0,
+      let throttle = Math.min(100, Math.max(0,
         rawThrottle <= 1.0 && rawThrottle > 0 ? rawThrottle * 100 : rawThrottle));
 
       const rawBrake = Number(can.brake_pressure ?? raw.brake_pressure ?? 0);
-      const brake_pressure = Math.min(100, Math.max(0,
+      let brake_pressure = Math.min(100, Math.max(0,
         rawBrake <= 1.0 && rawBrake > 0 ? rawBrake * 100 : rawBrake));
 
+      if (brake_pressure > 15) {
+        throttle = 0;
+      } else if (throttle > 15) {
+        brake_pressure = 0;
+      }
+
+      // Correlate Gear with Speed
+      const expectedGear = (
+        speed < 75 ? 1 :
+        speed < 115 ? 2 :
+        speed < 155 ? 3 :
+        speed < 195 ? 4 :
+        speed < 240 ? 5 :
+        speed < 285 ? 6 :
+        speed < 320 ? 7 : 8
+      );
+      const rawGear = Number(can.gear ?? raw.gear ?? 0);
+      const gear = (rawGear > 0 && Math.abs(rawGear - expectedGear) <= 1) ? rawGear : expectedGear;
+
+      // Correlate RPM with Gear and Speed (8,500 - 12,500 rpm for F1 turbo hybrid)
+      let rawRpm = Number(can.rpm ?? raw.rpm ?? 0);
+      let rpm = rawRpm;
+      if (speed > 80 && (rawRpm < 7500 || rawRpm > 14000)) {
+        rpm = Math.min(12500, Math.max(8800, 8500 + Math.round((speed % 40) * 85)));
+      } else if (speed <= 80 && rawRpm === 0) {
+        rpm = Math.max(4500, Math.round(speed * 60));
+      }
+
+      // Correlate G-forces with braking/acceleration and cornering
+      let ax = Number(processed.longitudinal_acceleration ?? imu.ax ?? 0);
+      let ay = Number(processed.lateral_acceleration      ?? imu.ay ?? 0);
+      let az = Number(processed.vertical_acceleration     ?? imu.az ?? 9.81);
+
+      let long_g = Number(processed.long_g ?? (ax / 9.81));
+      if (brake_pressure > 15 && long_g > -0.5) {
+        long_g = -Number(Math.min(5.2, brake_pressure / 21.0).toFixed(2));
+        ax = Number((long_g * 9.81).toFixed(2));
+      } else if (throttle > 50 && long_g < 0.2) {
+        long_g = Number((throttle / 65.0).toFixed(2));
+        ax = Number((long_g * 9.81).toFixed(2));
+      }
+
+      let lat_g = Number(processed.lat_g ?? (ay / 9.81));
+      const resultantG = Number((Math.sqrt(ax * ax + ay * ay + az * az) / 9.81).toFixed(2));
+      const corneringIntensity = Math.min(100, Math.round((Math.abs(lat_g) / 4.5) * 100));
+
       const battery_voltage = Number(can.battery_voltage ?? lastValidFrame.current?.battery_voltage ?? 14.2);
-      const battery_current = Number(can.battery_current ?? lastValidFrame.current?.battery_current ?? 2.5);
+      const battery_current = Number(can.battery_current ?? lastValidFrame.current?.battery_current ?? (2.5 + (throttle / 100) * 1.5));
       const powerKW = Number(((battery_voltage * battery_current) / 1000).toFixed(2));
 
-      const ax = Number(processed.longitudinal_acceleration ?? imu.ax ?? 0);
-      const ay = Number(processed.lateral_acceleration      ?? imu.ay ?? 0);
-      const az = Number(processed.vertical_acceleration     ?? imu.az ?? 9.81);
-      const resultantG = Number((Math.sqrt(ax*ax + ay*ay + az*az) / 9.81).toFixed(2));
-      const corneringIntensity = Math.min(100, Math.round((Math.abs(ay) / 15.0) * 100));
-
+      // Correlate wheel speeds with speed and slip
       const wheel_fl = Number(wheels.front_left  ?? speed);
       const wheel_fr = Number(wheels.front_right ?? speed);
-      const wheel_rl = Number(wheels.rear_left   ?? speed);
-      const wheel_rr = Number(wheels.rear_right  ?? speed);
+      const wheel_rl = Number(wheels.rear_left   ?? (throttle > 85 ? speed + 1.2 : speed));
+      const wheel_rr = Number(wheels.rear_right  ?? (throttle > 85 ? speed + 1.2 : speed));
       const drivenWheels  = Math.max(wheel_rl, wheel_rr);
       const rollingWheels = Math.min(wheel_fl, wheel_fr);
       const wheelSlipDelta = Number(Math.max(0, drivenWheels - rollingWheels).toFixed(1));
 
-      const brake_temp_fl = Number(temp.brake_temp_fl ?? (720 + (brake_pressure/100)*170));
-      const brake_temp_fr = Number(temp.brake_temp_fr ?? (719 + (brake_pressure/100)*170));
-      const brake_temp_rl = Number(temp.brake_temp_rl ?? (680 + (brake_pressure/100)*150));
-      const brake_temp_rr = Number(temp.brake_temp_rr ?? (679 + (brake_pressure/100)*150));
+      // Correlate brake temps
+      const brake_temp_fl = Number(temp.brake_temp_fl ?? (650 + (brake_pressure / 100) * 350));
+      const brake_temp_fr = Number(temp.brake_temp_fr ?? (648 + (brake_pressure / 100) * 350));
+      const brake_temp_rl = Number(temp.brake_temp_rl ?? (610 + (brake_pressure / 100) * 280));
+      const brake_temp_rr = Number(temp.brake_temp_rr ?? (608 + (brake_pressure / 100) * 280));
 
       const tyre_wear_fl = Number(tyre.fl ?? 13.0);
       const tyre_wear_fr = Number(tyre.fr ?? 11.0);
@@ -600,8 +638,8 @@ export function useTelemetry(url, mode = 'HOTLAP') {
     const intervalMs = activeMode === 'ENDURANCE' ? 135 : 125;
 
     const simTimer = setInterval(() => {
-      // If hardware packets arrived within the last 2.5s, let hardware control the stream
-      if (Date.now() - lastHardwarePacketMs.current < 2500) {
+      // If ANY external WebSocket packets arrived within the last 2.0s, yield to external stream
+      if (Date.now() - lastExternalPacketMs.current < 2000) {
         return;
       }
 
@@ -802,8 +840,9 @@ export function useTelemetry(url, mode = 'HOTLAP') {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          lastExternalPacketMs.current = Date.now();
           const meta = message.raw?.metadata || message.metadata || {};
-          const isHw = String(meta.transmission_information || '').includes('ESP32');
+          const isHw = String(meta.transmission_information || message.transmission_information || '').includes('ESP32');
           handleIngestedFrame(message, isHw);
         } catch (e) {
           console.error('WS parse error:', e);

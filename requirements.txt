@@ -1,0 +1,4 @@
+# Vercel serverless runtime requirements for api/index.py
+# Pin only fastapi — uv resolves starlette and pydantic automatically.
+fastapi==0.115.0
+anyio>=4.0.0

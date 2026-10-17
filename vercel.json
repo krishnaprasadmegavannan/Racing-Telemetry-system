@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd dashboard-js && npm install && npm run build && node copyDist.cjs",
+  "outputDirectory": "dist",
+  "installCommand": "echo skip",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/:path*",        "destination": "/api/index.py" },
+    { "source": "/telemetry/:path*",  "destination": "/api/index.py" },
+    { "source": "/health",            "destination": "/api/index.py" },
+    { "source": "/:path*",            "destination": "/index.html" }
+  ]
+}

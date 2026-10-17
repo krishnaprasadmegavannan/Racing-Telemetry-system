@@ -203,6 +203,25 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     fastest_lap_num = prev_lap_num
 
             # Mode physics adjustments using same FastF1 data:
+            raw_throttle = frame["throttle"]
+            raw_brake = frame["brake_pressure"]
+            if raw_brake > 15:
+                throttle_adj = 0.0
+                brake_adj = raw_brake
+            elif raw_throttle > 15:
+                brake_adj = 0.0
+                throttle_adj = raw_throttle
+            else:
+                throttle_adj = raw_throttle
+                brake_adj = raw_brake
+
+            long_g_adj = frame["long_g"]
+            if brake_adj > 15 and long_g_adj > -0.5:
+                long_g_adj = -round(min(5.2, brake_adj / 21.0), 2)
+            elif throttle_adj > 50 and long_g_adj < 0.2:
+                long_g_adj = round(throttle_adj / 65.0, 2)
+            ax_adj = round(long_g_adj * 9.81, 2)
+
             if is_endurance:
                 # Endurance Race Stint: 105 kg fuel load, slightly reduced peak VMAX, medium tyres
                 speed_adj = round(frame["speed"] * 0.965, 1)
@@ -230,12 +249,12 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
 
             # Alerts generation: strictly ONE distinct active event at a time
             alerts = []
-            if frame["brake_pressure"] > 80:
+            if brake_adj > 80:
                 alerts.append({
                     "id": "heavy_braking_zone",
                     "severity": "warning",
                     "alert_type": "HEAVY BRAKING ZONE",
-                    "message": f"Threshold decel {frame['long_g']:.1f}G into {frame['corner_name']}",
+                    "message": f"Threshold decel {long_g_adj:.1f}G into {frame['corner_name']}",
                 })
             elif speed_adj > 330 and frame["drs"] > 0:
                 alerts.append({
@@ -276,10 +295,10 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     "vehicle_can": {
                         "rpm": rpm_adj,
                         "gear": frame["gear"],
-                        "throttle": frame["throttle"],
-                        "brake_pressure": frame["brake_pressure"],
+                        "throttle": throttle_adj,
+                        "brake_pressure": brake_adj,
                         "battery_voltage": 14.2,
-                        "battery_current": 2.5 if not is_endurance else round(2.0 + (frame['throttle'] / 100) * 1.5, 2),
+                        "battery_current": 2.5 if not is_endurance else round(2.0 + (throttle_adj / 100) * 1.5, 2),
                         "drs": frame["drs"],
                     },
                     "imu": {
@@ -323,8 +342,8 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     "speed": speed_adj,
                     "rpm": rpm_adj,
                     "gear": frame["gear"],
-                    "throttle": frame["throttle"],
-                    "brake_pressure": frame["brake_pressure"],
+                    "throttle": throttle_adj,
+                    "brake_pressure": brake_adj,
                     "corner_name": frame["corner_name"],
                     "sector": frame["sector"],
                     "distance": frame["distance_m"],
@@ -334,14 +353,14 @@ async def telemetry_ws(websocket: WebSocket, mode: str = "HOTLAP"):
                     "ers_mode": ers_mode,
                 },
                 "processed": {
-                    "longitudinal_acceleration": frame["ax"],
+                    "longitudinal_acceleration": ax_adj,
                     "lateral_acceleration": frame["ay"],
                     "vertical_acceleration": 9.81,
-                    "long_g": frame["long_g"],
+                    "long_g": long_g_adj,
                     "lat_g": frame["lat_g"],
                     "resultant_g": frame["resultant_g"],
                     "cornering_intensity": frame["cornering_intensity"],
-                    "braking_intensity": frame["brake_pressure"],
+                    "braking_intensity": brake_adj,
                     "corner_name": frame["corner_name"],
                 },
                 "alerts": alerts,
