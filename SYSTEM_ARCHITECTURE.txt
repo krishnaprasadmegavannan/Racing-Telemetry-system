@@ -1,0 +1,192 @@
+================================================================================
+APEX-01 RACING TELEMETRY PIT-WALL — SYSTEM ARCHITECTURE & WORKFLOW SPECIFICATION
+Repository: C:\Users\megav\.gemini\scratch\apex-01-working\telemetry-project
+Live URL: https://telemetry-project-theta.vercel.app
+================================================================================
+
+1. SYSTEM OVERVIEW
+--------------------------------------------------------------------------------
+The APEX-01 Telemetry System is a production-grade, real-time motorsport pit-wall
+dashboard designed for Formula 1 and automotive prototyping.
+
+The system features:
+  - Default Software Mode: Streams authentic FastF1 2022 Italian GP Qualifying telemetry
+    (Charles Leclerc #16 Ferrari F1-75, 1:20.161 pole lap) at 20 Hz with sub-frame
+    linear interpolation.
+  - Seamless Hardware Integration: Dynamically accepts physical data from a Dual-ESP32
+    CAN bus sensor network via USB Serial or Wi-Fi HTTP without restarting the backend.
+  - Triple-Layer Resilience Hierarchy: Automatically arbitrates between hardware input,
+    cloud WebSocket streaming, and client-side offline simulation so the UI never freezes.
+  - Silky Smooth Display: Dual-stage smoothing (backend sub-frame interpolation +
+    client-side exponential lerp filtering + 200 ms CSS easing) eliminates all visual
+    stepping and coordinate jumping.
+
+
+2. END-TO-END ARCHITECTURAL DIAGRAM
+--------------------------------------------------------------------------------
+
++-----------------------------------------------------------------------------+
+|                          HARDWARE LAYER (OPTIONAL)                          |
+|                                                                             |
+|  +--------------------------+          CAN Bus (500 kbps)                   |
+|  |       ESP32 #2           |  ---------------------------------+           |
+|  |  CAN ECU Simulator       |   (SN65HVD230 Transceiver)        |           |
+|  |  (CAN IDs: 0x100..0x103) |                                   |           |
+|  +--------------------------+                                   |           |
+|                                                                 v           |
+|  +-----------------------------------------------------------------------+  |
+|  |                              ESP32 #1                                 |  |
+|  |                    DAQ & Sensor Master Unit                           |  |
+|  |  - GPS (UART: Lat/Lon/Speed)     - Hall Wheel Speed (Digital Pulse)   |  |
+|  |  - IMU (I2C: 3-Axis Accel/Gyro)  - Infrared Brake Temp (I2C MLX90614) |  |
+|  |  - CAN TWAI Receiver (GPIO 4/5)  - Merges CAN + Physical Sensors     |  |
+|  +-----------------------------------------------------------------------+  |
+|                                     |                                       |
+|                    USB Serial (115200 baud) OR Wi-Fi HTTP                   |
+|                                     v                                       |
+|  +-----------------------------------------------------------------------+  |
+|  |                    bridge.py (Ingestion Daemon)                       |  |
+|  |  Modes: --mode simulator | --mode serial COMx | --mode wifi           |  |
+|  +-----------------------------------------------------------------------+  |
++-------------------------------------|---------------------------------------+
+                                      | HTTP POST /telemetry/ingest
+                                      v
++-----------------------------------------------------------------------------+
+|                         BACKEND SERVICE LAYER (FastAPI)                     |
+|                                                                             |
+|  +--------------------------+          +---------------------------------+  |
+|  |  FastF1 Monza Dataset    |          |   20 Hz Sub-frame Interpolator  |  |
+|  |  (623 Reference Frames)  | -------->|   - 50 ms cadence               |  |
+|  |  - Charles Leclerc Q3    |          |   - Linear Lerp across floats   |  |
+|  |  - 1:20.161 Benchmark    |          |   - Sub-pixel track coordinates |  |
+|  +--------------------------+          +---------------------------------+  |
+|                                                         |                   |
+|                                                         v                   |
+|                         WebSocket Server (/telemetry/ws)                    |
+|                         JSON Telemetry Packet Broadcast                     |
++-----------------------------------------------------------------------------+
+                                      | WebSocket (WSS / WS)
+                                      v
++-----------------------------------------------------------------------------+
+|                       FRONTEND HUD LAYER (React 19 + Vite)                  |
+|                                                                             |
+|  +-----------------------------------------------------------------------+  |
+|  |                           useTelemetry Hook                           |  |
+|  |  1. Stream Arbiter: If WebSocket active within 2000ms -> Local yields |  |
+|  |  2. Exponential Lerp Filter:                                          |  |
+|  |     * alpha = 0.40 (Fast): Speed, RPM, Throttle, Brake                |  |
+|  |     * alpha = 0.20 (Smooth): Track X/Y, Lateral/Long G, Brake Temps   |  |
+|  |  3. Fallback Sim Loop: 20 Hz sub-frame fallback if network drops     |  |
+|  |  4. Dynamic Lap Timer: Running clock, sector targets, PB detection    |  |
+|  +-----------------------------------------------------------------------+  |
+|                                     |                                       |
+|           +-------------------------+-------------------------+             |
+|           |                         |                         |             |
+|           v                         v                         v             |
+|  +------------------+      +------------------+      +------------------+   |
+|  |   Cockpit HUD    |      |  F1 Client HUD   |      |  Powertrain &    |   |
+|  | - Tachometer     |      | - 14x F1 Gauges  |      |    Dynamics      |   |
+|  | - Live Lap Timer |      | - Recharts Roll  |      | - Friction Circ. |   |
+|  | - Monza SVG Map  |      | - Lap Card Stats |      | - 4-Wheel Speeds |   |
+|  | - Alerts System  |      | - Wear & Temps   |      | - Battery / ERS  |   |
+|  +------------------+      +------------------+      +------------------+   |
++-----------------------------------------------------------------------------+
+
+
+3. DETAILED SUBSYSTEM SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+A. DATA ACQUISITION & HARDWARE (ESP32 Network)
+  1. ESP32 #2 (ECU Simulator):
+     - Acts as an electronic control unit (ECU).
+     - Broadcasts standard automotive CAN messages at 500 kbps over a 2-wire bus:
+         * 0x100: Engine Speed (RPM 0–15,000) and Throttle Position (0–100%)
+         * 0x101: Vehicle Speed (0–360 km/h), Gear Selection (1–8), Brake Pressure
+         * 0x102: Engine Coolant Temp (85–115°C) and Engine Core Temp (95–130°C)
+         * 0x103: Battery Voltage (13.8–14.4V) and Battery Current (A)
+  2. ESP32 #1 (DAQ Master):
+     - Listens to the CAN bus via the ESP32 Two-Wire Automotive Interface (TWAI)
+       connected to an SN65HVD230 transceiver.
+     - Reads physical peripherals: GPS (NMEA via UART), 6-axis IMU (I2C MPU6050),
+       hall-effect speed pulse, and infrared brake discs.
+     - Merges CAN signals with sensor data into a standardized JSON payload.
+     - Transmits upstream via USB Serial (115200 baud) or Wi-Fi HTTP POST.
+
+B. INGESTION & BACKEND (FastAPI / api/index.py)
+  1. Default Dataset:
+     - 623 cleaned reference frames extracted from Charles Leclerc's 2022 Italian GP
+       Pole Lap (1:20.161) at the Autodromo Nazionale Monza.
+     - Every point contains exact GPS latitude, longitude, track SVG coordinates,
+       speed, gear, RPM, throttle, brake, longitudinal/lateral G-forces, and tyre wear.
+  2. 20 Hz Sub-frame Linear Interpolator:
+     - Streaming interval is 50 ms (20 updates/second).
+     - Calculates fractional frame index: `idx_float += idx_step`.
+     - Calls `get_interpolated_frame(idx_float)`: performs linear interpolation
+       between sample $k$ and $k+1$:
+         $$V_{interp} = V_k + (V_{k+1} - V_k) \times \text{fraction}$$
+     - Result: Smooth sub-pixel track navigation (~1.6 px/frame) with continuous
+       analog transitions across RPM, speed, and braking intensity.
+  3. Dynamic Lap & Sector Engine:
+     - Detects lap completions and advances through realistic lap variations.
+     - Dynamically manages session fastest lap records and updates purple benchmarks.
+     - Ingestion Endpoint (`POST /telemetry/ingest`): Receives external packets from
+       `bridge.py` and immediately routes them to active WebSocket clients.
+
+C. CLIENT-SIDE PIPELINE (dashboard-js / useTelemetry.js)
+  1. Stream Arbiter (Anti-Collision Engine):
+     - Maintains `lastExternalPacketMs` ref.
+     - Whenever a WebSocket packet arrives from the server, the timestamp is logged.
+     - The internal fallback simulation loop checks this timestamp on every tick:
+       if a WebSocket frame was received within the last 2000 ms, the fallback
+       loop yields execution and skips its update.
+     - Guarantees exactly one source of truth at any moment, eliminating back-and-forth
+       coordinate oscillation.
+  2. Exponential Smoothing Filter (Lerp):
+     - Applies smoothing to incoming values before updating React component state:
+         $$S_{t} = S_{t-1} + \alpha \times (X_t - S_{t-1})$$
+     - Dual-Rate Filtering:
+         * Fast Dynamics ($\alpha = 0.40$): Speed, RPM, Throttle, Brake pressure.
+           Preserves instant throttle snaps and threshold braking decel.
+         * Smooth Geometry ($\alpha = 0.20$): Track X/Y coordinates, lateral/long G,
+           temperatures. Completely eliminates graphical jitter.
+  3. Component Rendering & Transition Engine:
+     - All animated SVGs and CSS bar meters utilize 200 ms easing:
+         * Tachometer: `transition-all duration-200 ease-out`
+         * Track Map Car Beacon: `transition-all duration-200 ease-linear`
+         * Semicircular Gauges: `transition-all duration-200 ease-out`
+         * G-Force Traction Friction Dot: `transition-all duration-200 ease-out`
+
+
+4. HOW TO RUN THE SYSTEM
+--------------------------------------------------------------------------------
+
+A. RUNNING AS CLOUD / WEB APPLICATION (Default)
+   - Open browser: https://telemetry-project-theta.vercel.app
+   - Connects automatically to `wss://telemetry-project-theta.vercel.app/telemetry/ws`.
+   - Streams 20 Hz FastF1 Monza telemetry immediately with dynamic lap timing.
+
+B. RUNNING LOCALLY (Full Stack Dev)
+   1. Start Backend:
+      ```powershell
+      cd C:\Users\megav\.gemini\scratch\apex-01-working\telemetry-project
+      python -m uvicorn api.index:app --reload --port 8000
+      ```
+   2. Start Frontend:
+      ```powershell
+      cd dashboard-js
+      npm run dev
+      ```
+   3. Open browser: http://localhost:5173
+
+C. RUNNING WITH PHYSICAL HARDWARE (ESP32)
+   1. Flash `esp32-telemetry-firmware/apex01_ecu_simulator.ino` to ESP32 #2.
+   2. Flash `esp32-telemetry-firmware/apex01_telemetry_master.ino` to ESP32 #1.
+   3. Connect ESP32 #1 to PC via USB.
+   4. Run Bridge:
+      ```powershell
+      python bridge.py --mode serial --port COM3
+      ```
+   5. Dashboard automatically switches from FastF1 stream to live ESP32 hardware!
+================================================================================
+END OF ARCHITECTURE SPECIFICATION
+================================================================================
